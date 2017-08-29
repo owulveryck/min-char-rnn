@@ -27,7 +27,7 @@ func main() {
 
 	// hyperparameters
 	hiddenSize := 100
-	//seqLength := 25
+	seqLength := 25
 	//learningRate := 1e-1
 
 	// Model parameters
@@ -35,16 +35,34 @@ func main() {
 	for i := range rnd {
 		rnd[i] = rand.NormFloat64()
 	}
+	// Input to hidden
 	wxh := mat64.NewDense(hiddenSize, vocabSize, rnd)
+	// Hidden to output
 	why := mat64.NewDense(vocabSize, hiddenSize, rnd)
 	rnd = make([]float64, hiddenSize*hiddenSize)
 	for i := range rnd {
 		rnd[i] = rand.NormFloat64() * 0.01
 	}
+	// Hidden to hidden
 	whh := mat64.NewDense(hiddenSize, hiddenSize, rnd)
-	log.Println(wxh)
-	log.Println(whh)
-	log.Println(why)
+	// hidden bias
+	bh := mat64.NewVector(hiddenSize, make([]float64, hiddenSize))
+	by := mat64.NewVector(vocabSize, make([]float64, vocabSize))
+
+	// p is the position in the data array
+	p := 0
+	// n is the iteration number
+	n := 0
+	// hprev is a hiddenSizex1 array of initial hidden state
+	hprev := mat64.NewVector(hiddenSize, make([]float64, hiddenSize))
+
+	for {
+		if p+seqLength+1 >= len(data) || n == 0 {
+			// reset RNN memory
+			hprev = mat64.NewVector(hiddenSize, make([]float64, hiddenSize))
+			p = 0 // go from start of data
+		}
+	}
 
 }
 
