@@ -13,12 +13,12 @@ import (
 )
 
 type rnnType struct {
-	vocabSize    int // the size of the vocabulary
-	hiddenSize   int // the size of the hidden layer
-	bpttTruncate int
-	u            *mat64.Dense // size is hiddenSize * vocabSize
-	v            *mat64.Dense // size is vocabSize * hiddenSize
-	w            *mat64.Dense // size is hiddenSize * hiddenSize
+	vocabDimension  int // the size of the vocabulary
+	hiddenDimension int // the size of the hidden layer
+	bpttTruncate    int
+	u               *mat64.Dense // size is hiddenDimension * vocabDimension
+	v               *mat64.Dense // size is vocabDimension * hiddenDimension
+	w               *mat64.Dense // size is hiddenDimension * hiddenDimension
 }
 
 // Implementation of http://www.wildml.com/2015/09/recurrent-neural-networks-tutorial-part-2-implementing-a-language-model-rnn-with-python-numpy-and-theano/
@@ -32,35 +32,35 @@ func main() {
 	_, runesToIx, _ := getDataAndVocab(file)
 	file.Close()
 	//dataSize := len(data)
-	//fmt.Printf("data has %d runes, %d unique.\n", dataSize, vocabSize)
+	//fmt.Printf("data has %d runes, %d unique.\n", dataSize, vocabDimension)
 
 	rnn := &rnnType{
-		vocabSize:  len(runesToIx),
-		hiddenSize: 100,
+		vocabDimension:  len(runesToIx),
+		hiddenDimension: 100,
 	}
 	// Initialize the matrices with random parameters o
 	// Initialize the random seed
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	uData := make([]float64, rnn.vocabSize*rnn.hiddenSize)
+	uData := make([]float64, rnn.vocabDimension*rnn.hiddenDimension)
 	for i := range uData {
 		uData[i] = r.NormFloat64()
 	}
-	rnn.u = mat64.NewDense(rnn.hiddenSize, rnn.vocabSize, uData)
+	rnn.u = mat64.NewDense(rnn.hiddenDimension, rnn.vocabDimension, uData)
 
-	vData := make([]float64, rnn.vocabSize*rnn.hiddenSize)
+	vData := make([]float64, rnn.vocabDimension*rnn.hiddenDimension)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := range vData {
 		vData[i] = r.NormFloat64()
 	}
-	rnn.v = mat64.NewDense(rnn.vocabSize, rnn.hiddenSize, vData)
+	rnn.v = mat64.NewDense(rnn.vocabDimension, rnn.hiddenDimension, vData)
 
-	wData := make([]float64, rnn.hiddenSize*rnn.hiddenSize)
+	wData := make([]float64, rnn.hiddenDimension*rnn.hiddenDimension)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := range wData {
 		wData[i] = r.NormFloat64()
 	}
-	rnn.w = mat64.NewDense(rnn.hiddenSize, rnn.hiddenSize, wData)
+	rnn.w = mat64.NewDense(rnn.hiddenDimension, rnn.hiddenDimension, wData)
 	log.Println(rnn)
 
 }
