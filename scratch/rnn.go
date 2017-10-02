@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math"
 	"math/rand"
 	"time"
 
@@ -12,11 +11,12 @@ import (
 // This RNNs parameters are the three matrices whh, wxh, why.
 // h is the hidden state, which is actually the memory of the RNN
 type rnn struct {
-	whh *mat64.Dense  // size is hiddenDimension * hiddenDimension
-	wxh *mat64.Dense  //
-	why *mat64.Dense  //
-	h   *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
-	bh  *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
+	whh   *mat64.Dense  // size is hiddenDimension * hiddenDimension
+	wxh   *mat64.Dense  //
+	why   *mat64.Dense  //
+	h     *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
+	hprev *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
+	bh    *mat64.Vector // This is the biais
 }
 
 // newRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
@@ -61,25 +61,6 @@ func (r *rnn) step(x *mat64.Vector) *mat64.Vector {
 	return dot(r.why, r.h)
 }
 
-// tanh applies an element-wise tanh to the parameter and returns a new vector
-func tanh(x *mat64.Vector) *mat64.Vector {
-	y := mat64.NewVector(x.Len(), nil)
-	for i := 0; i < x.Len(); i++ {
-		y.SetVec(i, math.Tanh(x.At(i, 0)))
-	}
-	return y
-}
-
-// dot is a matrix multiplication the returns a Vector
-func dot(x mat64.Matrix, y *mat64.Vector) *mat64.Vector {
-	v := mat64.NewVector(y.Len(), nil)
-	v.MulVec(x, y)
-	return v
-}
-
-// TODO: check the size of the vectors...
-func add(x, y *mat64.Vector) *mat64.Vector {
-	v := mat64.NewVector(x.Len(), nil)
-	v.AddVec(x, y)
-	return v
+// Estimate the loss function
+func (r *rnn) loss(inputs, targets *mat64.Vector) {
 }
