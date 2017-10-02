@@ -1,58 +1,67 @@
 package main
 
 import (
-	"math"
+	"bytes"
+	"io"
+	"io/ioutil"
+	"log"
+	"os"
 
 	"github.com/gonum/matrix/mat64"
 )
 
-// The rnn represents the neural network
-// This RNNs parameters are the three matrices whh, wxh, why.
-// h is the hidden state, which is actually the memory of the RNN
-type rnn struct {
-	whh *mat64.Dense  // size is hiddenDimension * hiddenDimension
-	wxh *mat64.Dense  //
-	why *mat64.Dense  //
-	h   *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
-	bh  *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
-}
-
-// newRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
-// The hidden state h is initialized with the zero vector.
-func newRNN(x, y, h int) *rnn {
-	return nil
-}
-
-// step updates the hidden state of the RNN
-// The above specifies the forward pass of a vanilla RNN.
-// The np.tanh function implements a non-linearity that squashes the activations to the range [-1, 1].
-// There are two terms inside of the tanh:
-// * one is based on the previous hidden state and one is based on the current input.
-// The two intermediates interact with addition, and then get squashed by the tanh into the new state vector.
-func (r *rnn) step(x *mat64.Vector) *mat64.Vector {
-	r.h = tanh(add(dot(r.whh, add(r.h, r.bh)), dot(r.wxh, x)))
-	return dot(r.why, r.h)
-}
-
-// tanh applies an element-wise tanh to the parameter and returns a new vector
-func tanh(x *mat64.Vector) *mat64.Vector {
-	y := mat64.NewVector(x.Len(), nil)
-	for i := 0; i < x.Len(); i++ {
-		y.SetVec(i, math.Tanh(x.At(i, 0)))
+// Implementation of http://www.wildml.com/2015/09/recurrent-neural-networks-tutorial-part-2-implementing-a-language-model-rnn-with-python-numpy-and-theano/
+func main() {
+	// Open the sample text file
+	file, err := os.Open("input.txt")
+	if err != nil {
+		log.Fatal(err)
 	}
-	return y
+	//data, runesToIx, ixToRune := getDataAndVocab(file)
+	_, runesToIx, _ := getDataAndVocab(file)
+	file.Close()
+	//dataSize := len(data)
+	//fmt.Printf("data has %d runes, %d unique.\n", dataSize, vocabDimension)
+
+	// Create a new RNNs
+	// the first argument is the size of the input (the size of the vocabulary)
+	// the second input is the size of the output vector (which is also the size of the vocabulary)
+	// the lase argument is the size of the hidden layer
+	rnn := newRNN(len(runesToIx), len(runesToIx), 100)
+
 }
 
-// dot is a matrix multiplication the returns a Vector
-func dot(x mat64.Matrix, y *mat64.Vector) *mat64.Vector {
-	v := mat64.NewVector(y.Len(), nil)
-	v.MulVec(x, y)
-	return v
+// inputs,targets are both list of integers.
+// hprev is Hx1 array of initial hidden state
+// returns the loss, gradients on model parameters, and last hidden state
+func lossFun(inputs, targets []int, hprev *mat64.Vector) (float64, *mat64.Dense, *mat64.Dense, *mat64.Dense, *mat64.Dense, *mat64.Dense, *mat64.Vector) {
+	return 0.0, nil, nil, nil, nil, nil, nil
 }
 
-// TODO: check the size of the vectors...
-func add(x, y *mat64.Vector) *mat64.Vector {
-	v := mat64.NewVector(x.Len(), nil)
-	v.AddVec(x, y)
-	return v
+// sample a sequence of integers from the model
+// h is memory state, seedIx is seed letter for first time step
+// length is the sample size
+func sample(h *mat64.Vector, seedIx, length int) ([]int, error) {
+	return []int{0}, nil
+}
+
+func getDataAndVocab(input io.Reader) ([]rune, map[rune]int, map[int]rune) {
+	d, err := ioutil.ReadAll(input)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Extract the rune list
+	runeToIx := make(map[rune]int)
+	data := bytes.Runes(d)
+	for _, v := range data {
+		runeToIx[v] = 0
+	}
+	ixToRune := make(map[int]rune, len(runeToIx))
+	i := 0
+	for k := range runeToIx {
+		runeToIx[k] = i
+		ixToRune[i] = k
+		i++
+	}
+	return data, runeToIx, ixToRune
 }
