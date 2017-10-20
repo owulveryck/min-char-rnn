@@ -17,6 +17,7 @@ type rnn struct {
 	h     *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
 	hprev *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
 	bh    *mat64.Vector // This is the biais
+	by    *mat64.Vector // This is the biais
 }
 
 // newRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
@@ -54,13 +55,22 @@ func newRNN(x, y, h int) *rnn {
 // The above specifies the forward pass of a vanilla RNN.
 // The np.tanh function implements a non-linearity that squashes the activations to the range [-1, 1].
 // There are two terms inside of the tanh:
-// * one is based on the previous hidden state and one is based on the current input.
+// one is based on the previous hidden state and one is based on the current input.
 // The two intermediates interact with addition, and then get squashed by the tanh into the new state vector.
 func (r *rnn) step(x *mat64.Vector) *mat64.Vector {
+	// TODO: I think that there is a bad implementation here
 	r.h = tanh(add(dot(r.whh, add(r.h, r.bh)), dot(r.wxh, x)))
 	return dot(r.why, r.h)
 }
 
-// Estimate the loss function
-func (r *rnn) loss(inputs, targets *mat64.Vector) {
+// Estimate the loss function between inputs and targets
+// returns the loss and gradients on model parameters
+// The last hidden state is modified
+func (r *rnn) loss(inputs, targets *mat64.Vector) (loss float64, dwxh, dwhh, dwhy *mat64.Dense, dbh, dby *mat64.Vector) {
+	return
+}
+
+// Update the rnn with Adagrad method
+func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat64.Dense, dbhh, dby *mat64.Vector) {
+	return
 }
