@@ -2,19 +2,25 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"io/ioutil"
-	"log"
 )
 
-func getDataAndVocab(input io.Reader) ([]rune, map[rune]int, map[int]rune) {
-	d, err := ioutil.ReadAll(input)
+func getVocabIndexesFromFile(filename string) (map[rune]int, map[int]rune, error) {
+	data, err := ioutil.ReadFile(filename)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
+	runexToIx, ixToRune := getVocabIndexes(data)
+	return runexToIx, ixToRune, err
+}
+
+// getVocabIndexes reads all the input, fill in an array of runes,
+// and returns a map that maps a rune to its index, and another
+// one that maps the index to the rune
+func getVocabIndexes(input []byte) (map[rune]int, map[int]rune) {
 	// Extract the rune list
 	runeToIx := make(map[rune]int)
-	data := bytes.Runes(d)
+	data := bytes.Runes(input)
 	for _, v := range data {
 		runeToIx[v] = 0
 	}
@@ -25,5 +31,6 @@ func getDataAndVocab(input io.Reader) ([]rune, map[rune]int, map[int]rune) {
 		ixToRune[i] = k
 		i++
 	}
-	return data, runeToIx, ixToRune
+	return runeToIx, ixToRune
+
 }

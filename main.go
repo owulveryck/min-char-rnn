@@ -12,19 +12,15 @@ import (
 // Implementation of http://www.wildml.com/2015/09/recurrent-neural-networks-tutorial-part-2-implementing-a-language-model-rnn-with-python-numpy-and-theano/
 func main() {
 	seqLength := 25
-	file, err := os.Open("data/vocab.txt")
-	_, runesToIx, _ := getDataAndVocab(file)
-	file.Close()
+	runesToIx, _, err := getVocabIndexesFromFile("data/vocab.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Open the sample text file
 	data, err := os.Open("data/input.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
-	//data, runesToIx, ixToRune := getDataAndVocab(file)
-	defer file.Close()
-	//dataSize := len(data)
-	//fmt.Printf("data has %d runes, %d unique.\n", dataSize, vocabDimension)
-
 	// Create a new RNNs
 	// the first argument is the size of the input (the size of the vocabulary)
 	// the second input is the size of the output vector (which is also the size of the vocabulary)
@@ -35,6 +31,7 @@ func main() {
 	i := 0
 	x := mat64.NewVector(seqLength, nil)
 	for {
+		// Reading the file one rune at a time
 		if c, _, err := r.ReadRune(); err != nil {
 			if err == io.EOF {
 				break
@@ -42,6 +39,7 @@ func main() {
 				log.Fatal(err)
 			}
 		} else {
+			// Now filling the input vector with the index of the rune
 			x.SetVec(i, float64(runesToIx[c]))
 			i++
 			if i%seqLength == 0 {
