@@ -4,49 +4,67 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gonum/matrix/mat64"
+	"gonum.org/v1/gonum/mat"
 )
 
 // The rnn represents the neural network
 // This RNNs parameters are the three matrices whh, wxh, why.
 // h is the hidden state, which is actually the memory of the RNN
 type rnn struct {
-	whh   *mat64.Dense  // size is hiddenDimension * hiddenDimension
-	wxh   *mat64.Dense  //
-	why   *mat64.Dense  //
-	h     *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
-	hprev *mat64.Vector // This is the hidden vector, which actually represents the memory of the RNN
-	bh    *mat64.Vector // This is the biais
-	by    *mat64.Vector // This is the biais
+	whh    *mat.Dense // size is hiddenDimension * hiddenDimension
+	wxh    *mat.Dense //
+	why    *mat.Dense //
+	h      *mat.Dense // This is the hidden vector, which actually represents the memory of the RNN
+	hprev  *mat.Dense // This is the hidden vector, which actually represents the memory of the RNN
+	bh     *mat.Dense // This is the biais
+	by     *mat.Dense // This is the biais
+	config neuralNetConfig
+}
+
+// neuralNetConfig defines our neural network
+// architecture and learning parameters.
+type neuralNetConfig struct {
+	inputNeurons  int
+	outputNeurons int
+	hiddenNeurons int
+	memorySize    int
+	numEpochs     int
+	learningRate  float64
 }
 
 // newRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
 // The hidden state h is initialized with the zero vector.
-func newRNN(x, y, h int) *rnn {
+//func newRNN(x, y, h int) *rnn {
+func newRNN(config neuralNetConfig) *rnn {
 	var rnn rnn
-	// Initialize the matrices with random parameters o
-	// Initialize the random seed
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rnn.config = config
+	// Initialize biases/weights.
+	randSource := rand.NewSource(time.Now().UnixNano())
+	randGen := rand.New(randSource)
 
-	uData := make([]float64, x*h)
-	for i := range uData {
-		uData[i] = r.NormFloat64()
-	}
-	rnn.wxh = mat64.NewDense(x, h, uData)
+	rnn.wxh = mat.NewDense(config.inputNeurons, config.hiddenNeurons, nil)
+	rnn.whh = mat.NewDense(config.hiddenNeurons, config.hiddenNeurons, nil)
+	rnn.bh = mat.NewDense(1, config.hiddenNeurons, nil)
+	rnn.why = mat.NewDense(config.hiddenNeurons, config.outputNeurons, nil)
+	rnn.by = mat.NewDense(1, config.outputNeurons, nil)
 
-	vData := make([]float64, y*h)
-	r = rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := range vData {
-		vData[i] = r.NormFloat64()
-	}
-	rnn.why = mat64.NewDense(h, y, vData)
+	wHiddenRaw := rnn.wxh.RawMatrix().Data
+	wHiddenHiddenRaw := rnn.whh.RawMatrix().Data
+	bHiddenRaw := rnn.bh.RawMatrix().Data
+	wOutRaw := rnn.why.RawMatrix().Data
+	bOutRaw := rnn.by.RawMatrix().Data
 
-	wData := make([]float64, h*h)
-	r = rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := range wData {
-		wData[i] = r.NormFloat64()
+	for _, param := range [][]float64{
+		wHiddenRaw,
+		wHiddenHiddenRaw,
+		bHiddenRaw,
+		wOutRaw,
+		bOutRaw,
+	} {
+		for i := range param {
+			param[i] = randGen.Float64()
+		}
 	}
-	rnn.whh = mat64.NewDense(h, h, wData)
 
 	return &rnn
 }
@@ -57,20 +75,18 @@ func newRNN(x, y, h int) *rnn {
 // There are two terms inside of the tanh:
 // one is based on the previous hidden state and one is based on the current input.
 // The two intermediates interact with addition, and then get squashed by the tanh into the new state vector.
-func (r *rnn) step(x *mat64.Vector) *mat64.Vector {
-	// TODO: I think that there is a bad implementation here
-	r.h = tanh(add(dot(r.whh, add(r.h, r.bh)), dot(r.wxh, x)))
-	return dot(r.why, r.h)
+func (r *rnn) step(x *mat.Dense) *mat.Dense {
+	return nil
 }
 
 // Estimate the loss function between inputs and targets
 // returns the loss and gradients on model parameters
 // The last hidden state is modified
-func (r *rnn) loss(inputs, targets *mat64.Vector) (loss float64, dwxh, dwhh, dwhy *mat64.Dense, dbh, dby *mat64.Vector) {
+func (r *rnn) loss(inputs, targets *mat.Vector) (loss float64, dwxh, dwhh, dwhy, dbh, dby *mat.Dense) {
 	return
 }
 
 // Update the rnn with Adagrad method
-func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat64.Dense, dbhh, dby *mat64.Vector) {
+func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbhh, dby *mat.Dense) {
 	return
 }

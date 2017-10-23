@@ -6,10 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/gonum/matrix/mat64"
+	"gonum.org/v1/gonum/mat"
 )
 
-// Implementation of http://www.wildml.com/2015/09/recurrent-neural-networks-tutorial-part-2-implementing-a-language-model-rnn-with-python-numpy-and-theano/
 func main() {
 	seqLength := 25
 	runesToIx, _, err := getVocabIndexesFromFile("data/vocab.txt")
@@ -21,15 +20,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer data.Close()
+
+	// Define our network architecture and learning parameters.
+	config := neuralNetConfig{
+		inputNeurons:  len(runesToIx), // the input is the size of the vocabulary
+		outputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
+		hiddenNeurons: 100,
+		numEpochs:     100,
+		memorySize:    25, // This corresponds to seq_length in the initial implementation
+		learningRate:  0.3,
+	}
+
 	// Create a new RNNs
 	// the first argument is the size of the input (the size of the vocabulary)
 	// the second input is the size of the output vector (which is also the size of the vocabulary)
 	// the lase argument is the size of the hidden layer
-	_ = newRNN(len(runesToIx), len(runesToIx), 100)
-	// Read the io.Reader
+	rnn := newRNN(config)
 	r := bufio.NewReader(data)
 	i := 0
-	x := mat64.NewVector(seqLength, nil)
+	x := mat.NewDense(1, seqLength, nil)
 	for {
 		// Reading the file one rune at a time
 		if c, _, err := r.ReadRune(); err != nil {
@@ -40,12 +50,12 @@ func main() {
 			}
 		} else {
 			// Now filling the input vector with the index of the rune
-			x.SetVec(i, float64(runesToIx[c]))
+			x.Set(1, i, float64(runesToIx[c]))
 			i++
 			if i%seqLength == 0 {
-				//loss, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(nil, nil)
-				//log.Println(loss)
-				//rnn.adagrad(dwxh, dwhh, dwhy, dbh, dby)
+				// The vector is complete, evaluate the lossFunction and perform the parameters adaptation
+				_, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(nil, nil)
+				rnn.adagrad(dwxh, dwhh, dwhy, dbh, dby)
 				i = 0
 			}
 		}
