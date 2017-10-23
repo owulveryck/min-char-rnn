@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/gonum/matrix/mat64"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -11,13 +12,12 @@ import (
 // This RNNs parameters are the three matrices whh, wxh, why.
 // h is the hidden state, which is actually the memory of the RNN
 type rnn struct {
-	whh    *mat.Dense // size is hiddenDimension * hiddenDimension
-	wxh    *mat.Dense //
-	why    *mat.Dense //
-	h      *mat.Dense // This is the hidden vector, which actually represents the memory of the RNN
-	hprev  *mat.Dense // This is the hidden vector, which actually represents the memory of the RNN
-	bh     *mat.Dense // This is the biais
-	by     *mat.Dense // This is the biais
+	whh    *mat.Dense    // size is hiddenDimension * hiddenDimension
+	wxh    *mat.Dense    //
+	why    *mat.Dense    //
+	hprev  *mat.VecDense // This is the last element of the hidden vector, which actually represents the memory of the RNN
+	bh     *mat.Dense    // This is the biais
+	by     *mat.Dense    // This is the biais
 	config neuralNetConfig
 }
 
@@ -66,23 +66,29 @@ func newRNN(config neuralNetConfig) *rnn {
 		}
 	}
 
+	// initialise the hidden vector to zero
+	rnn.hprev = mat.NewVecDense(config.hiddenNeurons, nil)
 	return &rnn
-}
-
-// step updates the hidden state of the RNN
-// The above specifies the forward pass of a vanilla RNN.
-// The np.tanh function implements a non-linearity that squashes the activations to the range [-1, 1].
-// There are two terms inside of the tanh:
-// one is based on the previous hidden state and one is based on the current input.
-// The two intermediates interact with addition, and then get squashed by the tanh into the new state vector.
-func (r *rnn) step(x *mat.Dense) *mat.Dense {
-	return nil
 }
 
 // Estimate the loss function between inputs and targets
 // returns the loss and gradients on model parameters
 // The last hidden state is modified
-func (r *rnn) loss(inputs, targets *mat.Vector) (loss float64, dwxh, dwhh, dwhy, dbh, dby *mat.Dense) {
+func (r *rnn) loss(inputs, targets *mat64.Vector) (loss float64, dwxh, dwhh, dwhy, dbh, dby *mat.Dense) {
+	// Do the forward pass
+	// do the 1-of-k encoding of the input
+	xs := mat.NewDense((*inputs).Len(), r.config.inputNeurons, nil)
+	hs := mat.NewDense((*inputs).Len(), r.config.hiddenNeurons, nil)
+	for t := 0; t < (*inputs).Len(); t++ {
+		xs.Set(t, int((*inputs).At(t, 0)), 1)
+		hs.SetRow(t, tanh(
+			add(
+				dot(r.wxh.T(), xs.RowView(t)),
+				dot(r.whh, r.hprev),
+				r.bh.T(),
+			).T()).RawRowView(0))
+		// TODO: update hprev
+	}
 	return
 }
 
