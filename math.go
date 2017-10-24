@@ -13,6 +13,14 @@ func tanh(a []float64) []float64 {
 	}
 	return ret
 }
+
+func dotVec(a, b []float64) *mat.Dense {
+	va := mat.NewDense(1, len(a), a)
+	vb := mat.NewDense(len(b), 1, b)
+	ret := new(mat.Dense)
+	ret.Mul(va.T(), vb.T())
+	return ret
+}
 func dot(a mat.Matrix, b []float64) []float64 {
 	t := mat.NewDense(len(b), 1, b)
 	row, _ := a.Dims()

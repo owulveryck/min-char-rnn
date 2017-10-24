@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"log"
+	"math"
 	"os"
 )
 
@@ -38,6 +39,7 @@ func main() {
 	r := bufio.NewReader(data)
 	i := 0
 	inputs := make([]int, seqLength+1)
+	smoothLoss := -math.Log10(float64(1)/float64(config.inputNeurons)) * float64(seqLength)
 	for epoch := 0; epoch < config.numEpochs; epoch++ {
 		log.Println("Epoch: ", epoch)
 		if _, err := data.Seek(10, io.SeekStart); err != nil {
@@ -45,6 +47,7 @@ func main() {
 		}
 
 		// Do the batch processing
+		n := 0
 		for {
 			// Reading the file one rune at a time
 			if c, _, err := r.ReadRune(); err != nil {
@@ -59,9 +62,14 @@ func main() {
 				i++
 				if i%(seqLength+1) == 0 {
 					// The vector is complete, evaluate the lossFunction and perform the parameters adaptation
-					_, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(inputs[0:seqLength], inputs[1:seqLength+1])
+					loss, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(inputs[0:seqLength], inputs[1:seqLength+1])
+					smoothLoss = smoothLoss*0.999 + loss*0.001
+					if n%100 == 0 {
+						log.Printf("Epoch %v, iter %d, loss: %f", epoch, n, smoothLoss)
+					}
 					rnn.adagrad(dwxh, dwhh, dwhy, dbh, dby)
 					i = 0
+					n++
 				}
 			}
 		}
