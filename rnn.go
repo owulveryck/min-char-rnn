@@ -88,13 +88,22 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		ys[t] = make([]float64, r.config.outputNeurons)
 		ps[t] = make([]float64, r.config.outputNeurons)
 		xs[t][inputs[t]] = 1
-		hs[t] = tanh(
-			add(
-				dot(r.wxh, xs[t]),
-				dot(r.whh, r.hprev),
-				r.bh,
-			))
-		r.hprev = hs[t]
+		if t > 0 {
+			hs[t] = tanh(
+				add(
+					dot(r.wxh, xs[t]),
+					dot(r.whh, hs[t-1]),
+					r.bh,
+				))
+
+		} else {
+			hs[t] = tanh(
+				add(
+					dot(r.wxh, xs[t]),
+					dot(r.whh, r.hprev),
+					r.bh,
+				))
+		}
 		ys[t] = add(
 			dot(r.why, hs[t]),
 			r.by)
@@ -103,6 +112,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		// softmax (cross-entropy loss)
 		loss -= math.Log10(ps[t][targets[t]])
 	}
+	r.hprev = hs[len(inputs)-1]
 	// backward pass: compute gradients going backwards
 
 	dwxh = mat.NewDense(r.config.hiddenNeurons, r.config.inputNeurons, nil)
@@ -143,8 +153,8 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		dwxh.RawMatrix().Data,
 		dwhh.RawMatrix().Data,
 		dwhy.RawMatrix().Data,
-		dbh,
 		dby,
+		dbh,
 	} {
 		for i := range param {
 			if param[i] > 5 {
@@ -162,7 +172,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 	mem := new(mat.Dense)
 	memFunc := func(_, _ int, v float64) float64 {
-		return (math.Sqrt(v) + 1e-8)
+		return math.Sqrt(v + 1e-8)
 	}
 	learningRateFunc := func(_, _ int, v float64) float64 {
 		return -r.config.learningRate * v
@@ -195,4 +205,5 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 		dparam.Apply(learningRateFunc, dparam)
 		param.Add(param, dparam)
 	}
+
 }
