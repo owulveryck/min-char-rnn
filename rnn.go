@@ -2,11 +2,9 @@ package main
 
 import (
 	"log"
-	"math"
 	"math/rand"
 	"time"
 
-	"github.com/gonum/matrix/mat64"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -14,12 +12,12 @@ import (
 // This RNNs parameters are the three matrices whh, wxh, why.
 // h is the hidden state, which is actually the memory of the RNN
 type rnn struct {
-	whh    *mat.Dense    // size is hiddenDimension * hiddenDimension
-	wxh    *mat.Dense    //
-	why    *mat.Dense    //
-	hprev  *mat.VecDense // This is the last element of the hidden vector, which actually represents the memory of the RNN
-	bh     *mat.Dense    // This is the biais
-	by     *mat.Dense    // This is the biais
+	whh    *mat.Dense // size is hiddenDimension * hiddenDimension
+	wxh    *mat.Dense //
+	why    *mat.Dense //
+	hprev  []float64  // This is the last element of the hidden vector, which actually represents the memory of the RNN
+	bh     []float64  // This is the biais
+	by     []float64  // This is the biais
 	config neuralNetConfig
 }
 
@@ -44,24 +42,22 @@ func newRNN(config neuralNetConfig) *rnn {
 	randSource := rand.NewSource(time.Now().UnixNano())
 	randGen := rand.New(randSource)
 
-	rnn.wxh = mat.NewDense(config.inputNeurons, config.hiddenNeurons, nil)
+	rnn.wxh = mat.NewDense(config.hiddenNeurons, config.inputNeurons, nil)
 	rnn.whh = mat.NewDense(config.hiddenNeurons, config.hiddenNeurons, nil)
-	rnn.bh = mat.NewDense(1, config.hiddenNeurons, nil)
 	rnn.why = mat.NewDense(config.hiddenNeurons, config.outputNeurons, nil)
-	rnn.by = mat.NewDense(1, config.outputNeurons, nil)
+	rnn.bh = make([]float64, config.hiddenNeurons)
+	rnn.by = make([]float64, config.outputNeurons)
 
 	wHiddenRaw := rnn.wxh.RawMatrix().Data
 	wHiddenHiddenRaw := rnn.whh.RawMatrix().Data
-	bHiddenRaw := rnn.bh.RawMatrix().Data
 	wOutRaw := rnn.why.RawMatrix().Data
-	bOutRaw := rnn.by.RawMatrix().Data
 
 	for _, param := range [][]float64{
 		wHiddenRaw,
 		wHiddenHiddenRaw,
-		bHiddenRaw,
 		wOutRaw,
-		bOutRaw,
+		rnn.bh,
+		rnn.by,
 	} {
 		for i := range param {
 			param[i] = randGen.Float64()
@@ -69,59 +65,43 @@ func newRNN(config neuralNetConfig) *rnn {
 	}
 
 	// initialise the hidden vector to zero
-	rnn.hprev = mat.NewVecDense(config.hiddenNeurons, nil)
+	rnn.hprev = make([]float64, config.hiddenNeurons)
 	return &rnn
 }
 
 // Estimate the loss function between inputs and targets
 // returns the loss and gradients on model parameters
 // The last hidden state is modified
-func (r *rnn) loss(inputs, targets *mat64.Vector) (loss float64, dwxh, dwhh, dwhy, dbh, dby *mat.Dense) {
+func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy, dbh, dby *mat.Dense) {
 	// Do the forward pass
 	// do the 1-of-k encoding of the input
-	xs := mat.NewDense((*inputs).Len(), r.config.inputNeurons, nil)
-	hs := mat.NewDense((*inputs).Len(), r.config.hiddenNeurons, nil)
-	ys := mat.NewDense((*inputs).Len(), r.config.outputNeurons, nil)
-	ps := mat.NewDense((*inputs).Len(), r.config.outputNeurons, nil)
+	// xs is len(inputs)*len(vocabulary)
+	xs := make([][]float64, len(inputs))
+	// hidden state
+	hs := make([][]float64, len(inputs))
+	// un-normalized log probabilities for next chars
+	ys := make([][]float64, len(inputs))
+	// probabilities for next chars
+	ps := make([][]float64, len(inputs))
 	loss = 0
-	for t := 0; t < (*inputs).Len(); t++ {
-		xs.Set(t, int((*inputs).At(t, 0)), 1)
-		// hidden state
-		hs.SetRow(t, tanh(
+	for t := 0; t < len(inputs); t++ {
+		xs[t] = make([]float64, r.config.inputNeurons)
+		hs[t] = make([]float64, r.config.outputNeurons)
+		ys[t] = make([]float64, r.config.outputNeurons)
+		ps[t] = make([]float64, r.config.outputNeurons)
+		xs[t][inputs[t]] = 1
+		hs[t] = tanh(
 			add(
-				dot(
-					r.wxh.T(),
-					xs.RowView(t),
-				),
-				dot(
-					r.whh,
-					r.hprev,
-				),
-				r.bh.T(),
-			).T()).RawRowView(0))
-		r.hprev.CloneVec(hs.RowView(t).(*mat.VecDense))
-		// Unnormalized log probabilities for next chars
-		ys.SetRow(t, add(
-			dot(
-				r.why.T(),
-				hs.RowView(t),
-			).T(),
-			r.by,
-		).RawRowView(0))
-		// probabilities for next chars
-		exp := exp(ys.RowView(t).T())
-		sum := mat.Sum(exp)
-		exp.Apply(
-			func(_, _ int, v float64) float64 {
-				return v / sum
-			},
-			exp)
-		ps.SetRow(t, exp.RawRowView(0))
-		// softmax (cross-entropy loss)
-		loss -= math.Log(
-			ps.At(t,
-				int((*targets).At(t, 0)),
+				dot(r.wxh, xs[t]),
+				dot(r.whh, r.hprev),
+				r.bh,
 			))
+		r.hprev = hs[t]
+		ys[t] = add(
+			dot(r.why, hs[t]),
+			r.bh)
+		expYS := exp(ys[t])
+		ps[t] = div(expYS, sum(expYS))
 	}
 	log.Println(loss)
 	return

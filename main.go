@@ -5,8 +5,6 @@ import (
 	"io"
 	"log"
 	"os"
-
-	"github.com/gonum/matrix/mat64"
 )
 
 func main() {
@@ -39,7 +37,7 @@ func main() {
 
 	r := bufio.NewReader(data)
 	i := 0
-	x := mat64.NewVector(seqLength, nil)
+	inputs := make([]int, seqLength+1)
 	for epoch := 0; epoch < config.numEpochs; epoch++ {
 		log.Println("Epoch: ", epoch)
 		if _, err := data.Seek(10, io.SeekStart); err != nil {
@@ -57,11 +55,11 @@ func main() {
 				}
 			} else {
 				// Now filling the input vector with the index of the rune
-				x.SetVec(i, float64(runesToIx[c]))
+				inputs[i] = runesToIx[c]
 				i++
-				if i%seqLength == 0 {
+				if i%(seqLength+1) == 0 {
 					// The vector is complete, evaluate the lossFunction and perform the parameters adaptation
-					_, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(x, x)
+					_, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(inputs[0:seqLength], inputs[1:seqLength+1])
 					rnn.adagrad(dwxh, dwhh, dwhy, dbh, dby)
 					i = 0
 				}

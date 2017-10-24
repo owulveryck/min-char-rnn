@@ -6,33 +6,51 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-func tanh(a mat.Matrix) *mat.Dense {
-	t := new(mat.Dense)
-	applyTanh := func(_, _ int, v float64) float64 { return math.Tanh(v) }
-	t.Apply(applyTanh, a)
-	return t
+func tanh(a []float64) []float64 {
+	ret := make([]float64, len(a))
+	for i, v := range a {
+		ret[i] = math.Tanh(v)
+	}
+	return ret
 }
-func dot(a, b mat.Matrix) *mat.Dense {
-	t := new(mat.Dense)
-	t.Mul(a, b)
-	return t
-}
-
-func exp(a mat.Matrix) *mat.Dense {
-	t := new(mat.Dense)
-	applyExp := func(_, _ int, v float64) float64 { return math.Exp(v) }
-	t.Apply(applyExp, a)
-	return t
+func dot(a mat.Matrix, b []float64) []float64 {
+	t := mat.NewDense(len(b), 1, b)
+	row, _ := a.Dims()
+	backend := make([]float64, row)
+	r := mat.NewDense(row, 1, backend)
+	r.Mul(a, t)
+	return backend
 }
 
-func add(a ...mat.Matrix) *mat.Dense {
-	t := new(mat.Dense)
-	for _, m := range a {
-		if t.IsZero() {
-			t = mat.DenseCopyOf(m)
-		} else {
-			t.Add(t, m)
+func exp(a []float64) []float64 {
+	ret := make([]float64, len(a))
+	for i, v := range a {
+		ret[i] = math.Exp(v)
+	}
+	return ret
+}
+
+func sum(a []float64) float64 {
+	var res float64
+	for _, v := range a {
+		res += v
+	}
+	return res
+}
+func div(a []float64, val float64) []float64 {
+	ret := make([]float64, len(a))
+	for i, v := range a {
+		ret[i] = v / val
+	}
+	return ret
+
+}
+func add(a ...[]float64) []float64 {
+	ret := make([]float64, len(a[0]))
+	for _, element := range a {
+		for i, v := range element {
+			ret[i] += v
 		}
 	}
-	return t
+	return ret
 }
