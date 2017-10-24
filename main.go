@@ -41,6 +41,7 @@ func main() {
 	i := 0
 	x := mat64.NewVector(seqLength, nil)
 	for epoch := 0; epoch < config.numEpochs; epoch++ {
+		log.Println("Epoch: ", epoch)
 		if _, err := data.Seek(10, io.SeekStart); err != nil {
 			log.Fatal(err)
 		}
@@ -60,7 +61,7 @@ func main() {
 				i++
 				if i%seqLength == 0 {
 					// The vector is complete, evaluate the lossFunction and perform the parameters adaptation
-					_, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(x, nil)
+					_, dwxh, dwhh, dwhy, dbh, dby := rnn.loss(x, x)
 					rnn.adagrad(dwxh, dwhh, dwhy, dbh, dby)
 					i = 0
 				}

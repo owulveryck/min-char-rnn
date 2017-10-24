@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+	"math"
 	"math/rand"
 	"time"
 
@@ -79,16 +81,49 @@ func (r *rnn) loss(inputs, targets *mat64.Vector) (loss float64, dwxh, dwhh, dwh
 	// do the 1-of-k encoding of the input
 	xs := mat.NewDense((*inputs).Len(), r.config.inputNeurons, nil)
 	hs := mat.NewDense((*inputs).Len(), r.config.hiddenNeurons, nil)
+	ys := mat.NewDense((*inputs).Len(), r.config.outputNeurons, nil)
+	ps := mat.NewDense((*inputs).Len(), r.config.outputNeurons, nil)
+	loss = 0
 	for t := 0; t < (*inputs).Len(); t++ {
 		xs.Set(t, int((*inputs).At(t, 0)), 1)
+		// hidden state
 		hs.SetRow(t, tanh(
 			add(
-				dot(r.wxh.T(), xs.RowView(t)),
-				dot(r.whh, r.hprev),
+				dot(
+					r.wxh.T(),
+					xs.RowView(t),
+				),
+				dot(
+					r.whh,
+					r.hprev,
+				),
 				r.bh.T(),
 			).T()).RawRowView(0))
-		// TODO: update hprev
+		r.hprev.CloneVec(hs.RowView(t).(*mat.VecDense))
+		// Unnormalized log probabilities for next chars
+		ys.SetRow(t, add(
+			dot(
+				r.why.T(),
+				hs.RowView(t),
+			).T(),
+			r.by,
+		).RawRowView(0))
+		// probabilities for next chars
+		exp := exp(ys.RowView(t).T())
+		sum := mat.Sum(exp)
+		exp.Apply(
+			func(_, _ int, v float64) float64 {
+				return v / sum
+			},
+			exp)
+		ps.SetRow(t, exp.RawRowView(0))
+		// softmax (cross-entropy loss)
+		loss -= math.Log(
+			ps.At(t,
+				int((*targets).At(t, 0)),
+			))
 	}
+	log.Println(loss)
 	return
 }
 

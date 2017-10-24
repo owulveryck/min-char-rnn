@@ -32,11 +32,8 @@ def lossFun(inputs, targets, hprev):
   returns the loss, gradients on model parameters, and last hidden state
   """
   xs, hs, ys, ps = {}, {}, {}, {}
-  print hprev[0]
   hs[-1] = np.copy(hprev)
-  print "hs before: ",len(hs)
   loss = 0
-  print Wxh
   # forward pass
   for t in xrange(len(inputs)):
     xs[t] = np.zeros((vocab_size,1)) # encode in 1-of-k representation
@@ -46,8 +43,6 @@ def lossFun(inputs, targets, hprev):
     ys[t] = np.dot(Why, hs[t]) + by # unnormalized log probabilities for next chars
     ps[t] = np.exp(ys[t]) / np.sum(np.exp(ys[t])) # probabilities for next chars
     loss += -np.log(ps[t][targets[t],0]) # softmax (cross-entropy loss)
-  print "hs after ",len(hs)
-  print "xs after ",len(xs)
   # backward pass: compute gradients going backwards
   dWxh, dWhh, dWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
   dbh, dby = np.zeros_like(bh), np.zeros_like(by)
@@ -100,7 +95,7 @@ while True:
 
   
   # sample from the model now and then
-  if n % 100 == 0:
+  if n % 500 == 0:
     sample_ix = sample(hprev, inputs[0], 200)
     txt = ''.join(ix_to_char[ix] for ix in sample_ix)
     print '----\n %s \n----' % (txt, )

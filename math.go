@@ -17,6 +17,14 @@ func dot(a, b mat.Matrix) *mat.Dense {
 	t.Mul(a, b)
 	return t
 }
+
+func exp(a mat.Matrix) *mat.Dense {
+	t := new(mat.Dense)
+	applyExp := func(_, _ int, v float64) float64 { return math.Exp(v) }
+	t.Apply(applyExp, a)
+	return t
+}
+
 func add(a ...mat.Matrix) *mat.Dense {
 	t := new(mat.Dense)
 	for _, m := range a {
