@@ -14,10 +14,15 @@ import (
 type rnn struct {
 	whh    *mat.Dense // size is hiddenDimension * hiddenDimension
 	wxh    *mat.Dense //
+	mwhy   *mat.Dense //
+	mwhh   *mat.Dense // memory for the adaptative gradient updagte
+	mwxh   *mat.Dense //
 	why    *mat.Dense //
 	hprev  []float64  // This is the last element of the hidden vector, which actually represents the memory of the RNN
 	bh     []float64  // This is the biais
 	by     []float64  // This is the biais
+	mbh    []float64  // This is the biais
+	mby    []float64  // This is the biais
 	config neuralNetConfig
 }
 
@@ -47,6 +52,11 @@ func newRNN(config neuralNetConfig) *rnn {
 	rnn.why = mat.NewDense(config.outputNeurons, config.hiddenNeurons, nil)
 	rnn.bh = make([]float64, config.hiddenNeurons)
 	rnn.by = make([]float64, config.outputNeurons)
+	rnn.mwxh = mat.NewDense(config.hiddenNeurons, config.inputNeurons, nil)
+	rnn.mwhh = mat.NewDense(config.hiddenNeurons, config.hiddenNeurons, nil)
+	rnn.mwhy = mat.NewDense(config.outputNeurons, config.hiddenNeurons, nil)
+	rnn.mbh = make([]float64, config.hiddenNeurons)
+	rnn.mby = make([]float64, config.outputNeurons)
 
 	wHiddenRaw := rnn.wxh.RawMatrix().Data
 	wHiddenHiddenRaw := rnn.whh.RawMatrix().Data
@@ -110,7 +120,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		expYS := exp(ys[t])
 		ps[t] = div(expYS, sum(expYS))
 		// softmax (cross-entropy loss)
-		loss -= math.Log10(ps[t][targets[t]])
+		loss -= math.Log(ps[t][targets[t]])
 	}
 	r.hprev = hs[len(inputs)-1]
 	// backward pass: compute gradients going backwards
@@ -124,7 +134,8 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 	dhraw := make([]float64, len(hs[0]))
 
 	for t := len(inputs) - 1; t >= 0; t-- {
-		dy := ps[t]
+		dy := make([]float64, r.config.outputNeurons)
+		copy(dy, ps[t])
 		dy[targets[t]]--
 		dwhy.Add(dwhy,
 			dotVec(dy, hs[t]),
@@ -170,7 +181,6 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 
 // Update the rnn with Adagrad method
 func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
-	mem := new(mat.Dense)
 	memFunc := func(_, _ int, v float64) float64 {
 		return math.Sqrt(v + 1e-8)
 	}
@@ -178,32 +188,36 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 		return -r.config.learningRate * v
 	}
 
-	for _, params := range [][2]*mat.Dense{
-		[2]*mat.Dense{
-			r.wxh, dwxh,
+	for _, params := range [][3]*mat.Dense{
+		[3]*mat.Dense{
+			r.wxh, dwxh, r.mwxh,
 		},
-		[2]*mat.Dense{
-			r.whh, dwhh,
+		[3]*mat.Dense{
+			r.whh, dwhh, r.mwhh,
 		},
-		[2]*mat.Dense{
-			r.why, dwhy,
+		[3]*mat.Dense{
+			r.why, dwhy, r.mwhy,
 		},
-		[2]*mat.Dense{
-			mat.NewDense(len(r.bh), 1, r.bh), mat.NewDense(len(dbh), 1, dbh),
+		[3]*mat.Dense{
+			mat.NewDense(len(r.bh), 1, r.bh), mat.NewDense(len(dbh), 1, dbh), mat.NewDense(len(r.mbh), 1, r.mbh),
 		},
-		[2]*mat.Dense{
-			mat.NewDense(len(r.by), 1, r.by), mat.NewDense(len(dby), 1, dby),
+		[3]*mat.Dense{
+			mat.NewDense(len(r.by), 1, r.by), mat.NewDense(len(dby), 1, dby), mat.NewDense(len(r.mby), 1, r.mby),
 		},
 	} {
 		param := params[0]
 		dparam := params[1]
-		mem.Reset()
-		mem.MulElem(dparam, dparam)
-
-		mem.Apply(memFunc, mem)
-		dparam.DivElem(dparam, mem)
-		dparam.Apply(learningRateFunc, dparam)
-		param.Add(param, dparam)
+		mem := params[2]
+		tmp := new(mat.Dense)
+		tmp.MulElem(dparam, dparam)
+		mem.Add(mem, tmp)
+		tmp.Reset()
+		tmp.Apply(memFunc, mem)
+		tmp2 := new(mat.Dense)
+		tmp2.Apply(learningRateFunc, dparam)
+		tmp3 := new(mat.Dense)
+		tmp3.DivElem(tmp2, tmp)
+		param.Add(param, tmp3)
 	}
 
 }
