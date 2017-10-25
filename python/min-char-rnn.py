@@ -55,7 +55,6 @@ def lossFun(inputs, targets, hprev):
     dby += dy
     dh = np.dot(Why.T, dy) + dhnext # backprop into h
     dhraw = (1 - hs[t] * hs[t]) * dh # backprop through tanh nonlinearity
-    print dhraw
     dbh += dhraw
     dWxh += np.dot(dhraw, xs[t].T)
     dWhh += np.dot(dhraw, hs[t-1].T)
@@ -101,12 +100,12 @@ while True:
   if n % 500 == 0:
     sample_ix = sample(hprev, inputs[0], 200)
     txt = ''.join(ix_to_char[ix] for ix in sample_ix)
-    #print '----\n %s \n----' % (txt, )
+    print '----\n %s \n----' % (txt, )
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
   smooth_loss = smooth_loss * 0.999 + loss * 0.001
-  #if n % 100 == 0: print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
+  if n % 100 == 0: print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
   
   # perform parameter update with Adagrad
   for param, dparam, mem in zip([Wxh, Whh, Why, bh, by], 

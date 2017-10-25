@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gonum.org/v1/gonum/mat"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 // The rnn represents the neural network
@@ -24,6 +25,10 @@ type rnn struct {
 	mbh    []float64  // This is the biais
 	mby    []float64  // This is the biais
 	config neuralNetConfig
+	xs     [][]float64
+	hs     [][]float64
+	ys     [][]float64
+	ps     [][]float64
 }
 
 // neuralNetConfig defines our neural network
@@ -44,8 +49,6 @@ func newRNN(config neuralNetConfig) *rnn {
 	var rnn rnn
 	rnn.config = config
 	// Initialize biases/weights.
-	randSource := rand.NewSource(time.Now().UnixNano())
-	randGen := rand.New(randSource)
 
 	rnn.wxh = mat.NewDense(config.hiddenNeurons, config.inputNeurons, nil)
 	rnn.whh = mat.NewDense(config.hiddenNeurons, config.hiddenNeurons, nil)
@@ -68,12 +71,24 @@ func newRNN(config neuralNetConfig) *rnn {
 		wOutRaw,
 	} {
 		for i := range param {
-			param[i] = randGen.Float64() * 0.01
+			randSource := rand.NewSource(time.Now().UnixNano())
+			randGen := rand.New(randSource)
+			param[i] = randGen.NormFloat64() * 0.01
 		}
 	}
 
 	// initialise the hidden vector to zero
 	rnn.hprev = make([]float64, config.hiddenNeurons)
+
+	// xs is len(inputs)*len(vocabulary)
+	rnn.xs = make([][]float64, config.inputNeurons)
+	// hidden state
+	rnn.hs = make([][]float64, config.inputNeurons)
+	// un-normalized log probabilities for next chars
+	rnn.ys = make([][]float64, config.inputNeurons)
+	// probabilities for next chars
+	rnn.ps = make([][]float64, config.inputNeurons)
+
 	return &rnn
 }
 
@@ -83,46 +98,38 @@ func newRNN(config neuralNetConfig) *rnn {
 func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 	// Do the forward pass
 	// do the 1-of-k encoding of the input
-	// xs is len(inputs)*len(vocabulary)
-	xs := make([][]float64, len(inputs))
-	// hidden state
-	hs := make([][]float64, len(inputs))
-	// un-normalized log probabilities for next chars
-	ys := make([][]float64, len(inputs))
-	// probabilities for next chars
-	ps := make([][]float64, len(inputs))
 	loss = 0
 	for t := 0; t < len(inputs); t++ {
-		xs[t] = make([]float64, r.config.inputNeurons)
-		hs[t] = make([]float64, r.config.outputNeurons)
-		ys[t] = make([]float64, r.config.outputNeurons)
-		ps[t] = make([]float64, r.config.outputNeurons)
-		xs[t][inputs[t]] = 1
+		r.xs[t] = make([]float64, r.config.inputNeurons)
+		r.hs[t] = make([]float64, r.config.outputNeurons)
+		r.ys[t] = make([]float64, r.config.outputNeurons)
+		r.ps[t] = make([]float64, r.config.outputNeurons)
+		r.xs[t][inputs[t]] = 1
 		if t > 0 {
-			hs[t] = tanh(
+			r.hs[t] = tanh(
 				add(
-					dot(r.wxh, xs[t]),
-					dot(r.whh, hs[t-1]),
+					dot(r.wxh, r.xs[t]),
+					dot(r.whh, r.hs[t-1]),
 					r.bh,
 				))
 
 		} else {
-			hs[t] = tanh(
+			r.hs[t] = tanh(
 				add(
-					dot(r.wxh, xs[t]),
+					dot(r.wxh, r.xs[t]),
 					dot(r.whh, r.hprev),
 					r.bh,
 				))
 		}
-		ys[t] = add(
-			dot(r.why, hs[t]),
+		r.ys[t] = add(
+			dot(r.why, r.hs[t]),
 			r.by)
-		expYS := exp(ys[t])
-		ps[t] = div(expYS, sum(expYS))
+		expYS := exp(r.ys[t])
+		r.ps[t] = div(expYS, sum(expYS))
 		// softmax (cross-entropy loss)
-		loss -= math.Log(ps[t][targets[t]])
+		loss -= math.Log(r.ps[t][targets[t]])
 	}
-	r.hprev = hs[len(inputs)-1]
+	r.hprev = r.hs[len(inputs)-1]
 	// backward pass: compute gradients going backwards
 
 	dwxh = mat.NewDense(r.config.hiddenNeurons, r.config.inputNeurons, nil)
@@ -131,14 +138,14 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 	dhnext := make([]float64, r.config.outputNeurons)
 	dbh = make([]float64, r.config.hiddenNeurons)
 	dby = make([]float64, r.config.outputNeurons)
-	dhraw := make([]float64, len(hs[0]))
+	dhraw := make([]float64, len(r.hs[0]))
 
 	for t := len(inputs) - 1; t >= 0; t-- {
 		dy := make([]float64, r.config.outputNeurons)
-		copy(dy, ps[t])
+		copy(dy, r.ps[t])
 		dy[targets[t]]--
 		dwhy.Add(dwhy,
-			dotVec(dy, hs[t]),
+			dotVec(dy, r.hs[t]),
 		)
 		dby = add(dby, dy)
 		dh := add(
@@ -146,16 +153,16 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 			dhnext,
 		)
 
-		for i := range hs[t] {
-			dhraw[i] = (1 - hs[t][i]*hs[t][i]) * dh[i]
+		for i := range r.hs[t] {
+			dhraw[i] = (1 - r.hs[t][i]*r.hs[t][i]) * dh[i]
 		}
 
 		dbh = add(dbh, dhraw)
-		dwxh.Add(dwxh, dotVec(dhraw, xs[t]))
+		dwxh.Add(dwxh, dotVec(dhraw, r.xs[t]))
 		if t == 0 {
-			dwhh.Add(dwhh, dotVec(dhraw, hs[len(inputs)-1]))
+			dwhh.Add(dwhh, dotVec(dhraw, r.hs[len(inputs)-1]))
 		} else {
-			dwhh.Add(dwhh, dotVec(dhraw, hs[t-1]))
+			dwhh.Add(dwhh, dotVec(dhraw, r.hs[t-1]))
 		}
 		dhnext = dot(r.whh.T(), dhraw)
 	}
@@ -247,14 +254,8 @@ func (r *rnn) sample(seed, n int) []int {
 		expY := exp(y)
 		p := div(expY, sum(expY))
 		// find the best match
-		bestProb := float64(0)
-		bestIdx := 0
-		for i, v := range p {
-			if v >= bestProb {
-				bestProb = v
-				bestIdx = i
-			}
-		}
+		sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
+		bestIdx := int(sample.Rand())
 		res[i] = bestIdx
 	}
 	return res

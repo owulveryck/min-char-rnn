@@ -22,7 +22,7 @@ func main() {
 		outputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
 		hiddenNeurons: 100,
 		numEpochs:     100,
-		memorySize:    25, // This corresponds to seq_length in the initial implementation
+		memorySize:    30, // This corresponds to seq_length in the initial implementation
 		learningRate:  1e-1,
 	}
 
@@ -76,7 +76,10 @@ func main() {
 					n++
 					if n%1000 == 0 {
 						rand.Seed(time.Now().UnixNano())
-						index := rnn.sample(rand.Intn(config.inputNeurons), 50)
+						seed := rand.Intn(config.inputNeurons)
+						fmt.Printf("%c", ixToRunes[seed])
+
+						index := rnn.sample(seed, 250)
 						for _, idx := range index {
 							fmt.Printf("%c", ixToRunes[idx])
 						}
