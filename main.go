@@ -2,14 +2,17 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"math"
+	"math/rand"
 	"os"
+	"time"
 )
 
 func main() {
-	runesToIx, _, err := getVocabIndexesFromFile("data/vocab.txt")
+	runesToIx, ixToRunes, err := getVocabIndexesFromFile("data/vocab.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,8 +43,7 @@ func main() {
 	inputs := make([]int, config.memorySize+1)
 	smoothLoss := -math.Log10(float64(1)/float64(config.inputNeurons)) * float64(config.memorySize)
 	for epoch := 0; epoch < config.numEpochs; epoch++ {
-		log.Println("Epoch: ", epoch)
-		if _, err := data.Seek(10, io.SeekStart); err != nil {
+		if _, err := data.Seek(0, io.SeekStart); err != nil {
 			log.Fatal(err)
 		}
 
@@ -72,6 +74,15 @@ func main() {
 					// the first index is already set, let's restart in the second position
 					i = 1
 					n++
+					if n%1000 == 0 {
+						rand.Seed(time.Now().UnixNano())
+						index := rnn.sample(rand.Intn(config.inputNeurons), 50)
+						for _, idx := range index {
+							fmt.Printf("%c", ixToRunes[idx])
+						}
+						fmt.Println("")
+
+					}
 				}
 			}
 		}

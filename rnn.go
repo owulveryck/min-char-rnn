@@ -219,5 +219,43 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 		tmp3.DivElem(tmp2, tmp)
 		param.Add(param, tmp3)
 	}
+}
 
+func (r *rnn) sample(seed, n int) []int {
+	res := make([]int, n)
+	h := make([]float64, len(r.hprev))
+	copy(h, r.hprev)
+	for i := 0; i < n; i++ {
+		x := make([]float64, r.config.inputNeurons)
+		if i == 0 {
+			x[seed] = 1
+		} else {
+			x[res[i-1]] = 1
+		}
+
+		h = tanh(
+			add(
+				dot(r.wxh, x),
+				dot(r.whh, h),
+				r.bh,
+			),
+		)
+		y := add(
+			dot(r.why, h),
+			r.by,
+		)
+		expY := exp(y)
+		p := div(expY, sum(expY))
+		// find the best match
+		bestProb := float64(0)
+		bestIdx := 0
+		for i, v := range p {
+			if v >= bestProb {
+				bestProb = v
+				bestIdx = i
+			}
+		}
+		res[i] = bestIdx
+	}
+	return res
 }
