@@ -22,14 +22,11 @@ func main() {
 		outputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
 		hiddenNeurons: 100,
 		numEpochs:     100,
-		memorySize:    30, // This corresponds to seq_length in the initial implementation
+		memorySize:    25, // This corresponds to seq_length in the initial implementation
 		learningRate:  1e-1,
 	}
 
 	// Create a new RNNs
-	// the first argument is the size of the input (the size of the vocabulary)
-	// the second input is the size of the output vector (which is also the size of the vocabulary)
-	// the lase argument is the size of the hidden layer
 	rnn := newRNN(config)
 	// Open the sample text file
 	data, err := os.Open("data/input.txt")
@@ -49,6 +46,7 @@ func main() {
 
 		// Do the batch processing
 		n := 0
+		rnn.hprev = make([]float64, config.hiddenNeurons)
 		for {
 			// Reading the file one rune at a time
 			if c, _, err := r.ReadRune(); err != nil {
@@ -79,7 +77,7 @@ func main() {
 						seed := rand.Intn(config.inputNeurons)
 						fmt.Printf("%c", ixToRunes[seed])
 
-						index := rnn.sample(seed, 250)
+						index := rnn.sample(seed, 1000)
 						for _, idx := range index {
 							fmt.Printf("%c", ixToRunes[idx])
 						}

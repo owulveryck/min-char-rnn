@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"gonum.org/v1/gonum/mat"
@@ -25,7 +26,6 @@ type rnn struct {
 	mbh    []float64  // This is the biais
 	mby    []float64  // This is the biais
 	config neuralNetConfig
-	xs     [][]float64
 	hs     [][]float64
 	ys     [][]float64
 	ps     [][]float64
@@ -80,8 +80,6 @@ func newRNN(config neuralNetConfig) *rnn {
 	// initialise the hidden vector to zero
 	rnn.hprev = make([]float64, config.hiddenNeurons)
 
-	// xs is len(inputs)*len(vocabulary)
-	rnn.xs = make([][]float64, config.inputNeurons)
 	// hidden state
 	rnn.hs = make([][]float64, config.inputNeurons)
 	// un-normalized log probabilities for next chars
@@ -92,23 +90,32 @@ func newRNN(config neuralNetConfig) *rnn {
 	return &rnn
 }
 
+func (r *rnn) step(x []float64) (y []float64) {
+	return nil
+}
+
 // Estimate the loss function between inputs and targets
 // returns the loss and gradients on model parameters
 // The last hidden state is modified
 func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
+	wg := sync.WaitGroup{}
 	// Do the forward pass
 	// do the 1-of-k encoding of the input
+	// xs is len(inputs)*len(vocabulary)
+	xs := make([][]float64, r.config.inputNeurons)
+	for t := 0; t < len(inputs); t++ {
+		xs[t] = make([]float64, r.config.inputNeurons)
+		xs[t][inputs[t]] = 1
+	}
 	loss = 0
 	for t := 0; t < len(inputs); t++ {
-		r.xs[t] = make([]float64, r.config.inputNeurons)
 		r.hs[t] = make([]float64, r.config.outputNeurons)
 		r.ys[t] = make([]float64, r.config.outputNeurons)
 		r.ps[t] = make([]float64, r.config.outputNeurons)
-		r.xs[t][inputs[t]] = 1
 		if t > 0 {
 			r.hs[t] = tanh(
 				add(
-					dot(r.wxh, r.xs[t]),
+					dot(r.wxh, xs[t]),
 					dot(r.whh, r.hs[t-1]),
 					r.bh,
 				))
@@ -116,7 +123,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		} else {
 			r.hs[t] = tanh(
 				add(
-					dot(r.wxh, r.xs[t]),
+					dot(r.wxh, xs[t]),
 					dot(r.whh, r.hprev),
 					r.bh,
 				))
@@ -158,7 +165,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		}
 
 		dbh = add(dbh, dhraw)
-		dwxh.Add(dwxh, dotVec(dhraw, r.xs[t]))
+		dwxh.Add(dwxh, dotVec(dhraw, xs[t]))
 		if t == 0 {
 			dwhh.Add(dwhh, dotVec(dhraw, r.hs[len(inputs)-1]))
 		} else {
@@ -174,15 +181,20 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		dby,
 		dbh,
 	} {
-		for i := range param {
-			if param[i] > 5 {
-				param[i] = 5
+		wg.Add(1)
+		go func() {
+			for i := range param {
+				if param[i] > 5 {
+					param[i] = 5
+				}
+				if param[i] < -5 {
+					param[i] = -5
+				}
 			}
-			if param[i] < -5 {
-				param[i] = -5
-			}
-		}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	return
 }
 
@@ -195,6 +207,7 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 		return -r.config.learningRate * v
 	}
 
+	wg := sync.WaitGroup{}
 	for _, params := range [][3]*mat.Dense{
 		[3]*mat.Dense{
 			r.wxh, dwxh, r.mwxh,
@@ -212,20 +225,25 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 			mat.NewDense(len(r.by), 1, r.by), mat.NewDense(len(dby), 1, dby), mat.NewDense(len(r.mby), 1, r.mby),
 		},
 	} {
-		param := params[0]
-		dparam := params[1]
-		mem := params[2]
-		tmp := new(mat.Dense)
-		tmp.MulElem(dparam, dparam)
-		mem.Add(mem, tmp)
-		tmp.Reset()
-		tmp.Apply(memFunc, mem)
-		tmp2 := new(mat.Dense)
-		tmp2.Apply(learningRateFunc, dparam)
-		tmp3 := new(mat.Dense)
-		tmp3.DivElem(tmp2, tmp)
-		param.Add(param, tmp3)
+		wg.Add(1)
+		go func() {
+			param := params[0]
+			dparam := params[1]
+			mem := params[2]
+			tmp := new(mat.Dense)
+			tmp.MulElem(dparam, dparam)
+			mem.Add(mem, tmp)
+			tmp.Reset()
+			tmp.Apply(memFunc, mem)
+			tmp2 := new(mat.Dense)
+			tmp2.Apply(learningRateFunc, dparam)
+			tmp3 := new(mat.Dense)
+			tmp3.DivElem(tmp2, tmp)
+			param.Add(param, tmp3)
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 }
 
 func (r *rnn) sample(seed, n int) []int {
