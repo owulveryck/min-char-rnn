@@ -46,7 +46,6 @@ func main() {
 
 		// Do the batch processing
 		n := 0
-		rnn.hprev = make([]float64, config.hiddenNeurons)
 		for {
 			// Reading the file one rune at a time
 			if c, _, err := r.ReadRune(); err != nil {

@@ -20,15 +20,12 @@ type rnn struct {
 	mwhh   *mat.Dense // memory for the adaptative gradient updagte
 	mwxh   *mat.Dense //
 	why    *mat.Dense //
-	hprev  []float64  // This is the last element of the hidden vector, which actually represents the memory of the RNN
+	h      []float64  // This is the hidden vector that represents the memory of the RNN
 	bh     []float64  // This is the biais
 	by     []float64  // This is the biais
 	mbh    []float64  // This is the biais
 	mby    []float64  // This is the biais
 	config neuralNetConfig
-	hs     [][]float64
-	ys     [][]float64
-	ps     [][]float64
 }
 
 // neuralNetConfig defines our neural network
@@ -78,81 +75,70 @@ func newRNN(config neuralNetConfig) *rnn {
 	}
 
 	// initialise the hidden vector to zero
-	rnn.hprev = make([]float64, config.hiddenNeurons)
-
-	// hidden state
-	rnn.hs = make([][]float64, config.inputNeurons)
-	// un-normalized log probabilities for next chars
-	rnn.ys = make([][]float64, config.inputNeurons)
-	// probabilities for next chars
-	rnn.ps = make([][]float64, config.inputNeurons)
+	rnn.h = make([]float64, config.hiddenNeurons)
 
 	return &rnn
 }
 
+// RNNs have a deceptively simple API:
+// They accept an input vector x and give you an output vector y.
+// However, crucially this output vector’s contents are influenced
+// not only by the input you just fed in,
+// but also on the entire history of inputs you’ve fed in in the past.
+// Written as a class, the RNN’s API consists of a single step function:
 func (r *rnn) step(x []float64) (y []float64) {
-	return nil
+	r.h = tanh(
+		add(
+			dot(r.wxh, x),
+			dot(r.whh, r.h),
+			r.bh,
+		))
+	return add(
+		dot(r.why, r.h),
+		r.by)
 }
 
-// Estimate the loss function between inputs and targets
-// returns the loss and gradients on model parameters
-// The last hidden state is modified
-func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
-	wg := sync.WaitGroup{}
-	// Do the forward pass
-	// do the 1-of-k encoding of the input
-	// xs is len(inputs)*len(vocabulary)
-	xs := make([][]float64, r.config.inputNeurons)
-	for t := 0; t < len(inputs); t++ {
-		xs[t] = make([]float64, r.config.inputNeurons)
-		xs[t][inputs[t]] = 1
+// forwardPass takes a matrix of inputs and returns
+// the corresponding outputs matrix
+// and a matrix of the hidden states that will be used
+// for the backpropagation
+func (r *rnn) forwardPass(xs [][]float64) (ys, hs [][]float64) {
+	inputSize := len(xs)
+	// un-normalized log probabilities for next chars
+	ys = make([][]float64, inputSize)
+	hs = make([][]float64, inputSize)
+	for t := 0; t < inputSize; t++ {
+		// Initialization of the arrays
+		ys[t] = make([]float64, r.config.outputNeurons)
+		hs[t] = make([]float64, r.config.hiddenNeurons)
+		ys[t] = r.step(xs[t])
+		hs[t] = r.h
 	}
-	loss = 0
-	for t := 0; t < len(inputs); t++ {
-		r.hs[t] = make([]float64, r.config.outputNeurons)
-		r.ys[t] = make([]float64, r.config.outputNeurons)
-		r.ps[t] = make([]float64, r.config.outputNeurons)
-		if t > 0 {
-			r.hs[t] = tanh(
-				add(
-					dot(r.wxh, xs[t]),
-					dot(r.whh, r.hs[t-1]),
-					r.bh,
-				))
+	return
+}
 
-		} else {
-			r.hs[t] = tanh(
-				add(
-					dot(r.wxh, xs[t]),
-					dot(r.whh, r.hprev),
-					r.bh,
-				))
-		}
-		r.ys[t] = add(
-			dot(r.why, r.hs[t]),
-			r.by)
-		expYS := exp(r.ys[t])
-		r.ps[t] = div(expYS, sum(expYS))
-		// softmax (cross-entropy loss)
-		loss -= math.Log(r.ps[t][targets[t]])
-	}
-	r.hprev = r.hs[len(inputs)-1]
-	// backward pass: compute gradients going backwards
-
+// Do a backpropagation of the RNNs and returns the derivates
+// xs is the input matrix
+// ts is the target matrices
+// ps is the normalized log probability
+// hs is a matrix of hidden vector
+func (r *rnn) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
+	inputSize := len(xs)
 	dwxh = mat.NewDense(r.config.hiddenNeurons, r.config.inputNeurons, nil)
 	dwhh = mat.NewDense(r.config.hiddenNeurons, r.config.hiddenNeurons, nil)
 	dwhy = mat.NewDense(r.config.outputNeurons, r.config.hiddenNeurons, nil)
 	dhnext := make([]float64, r.config.outputNeurons)
 	dbh = make([]float64, r.config.hiddenNeurons)
 	dby = make([]float64, r.config.outputNeurons)
-	dhraw := make([]float64, len(r.hs[0]))
+	dhraw := make([]float64, len(hs[0]))
 
-	for t := len(inputs) - 1; t >= 0; t-- {
+	for t := inputSize - 1; t >= 0; t-- {
 		dy := make([]float64, r.config.outputNeurons)
-		copy(dy, r.ps[t])
-		dy[targets[t]]--
+		for i := range ps[t] {
+			dy[i] = ps[t][i] - ts[t][i]
+		}
 		dwhy.Add(dwhy,
-			dotVec(dy, r.hs[t]),
+			dotVec(dy, hs[t]),
 		)
 		dby = add(dby, dy)
 		dh := add(
@@ -160,19 +146,64 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 			dhnext,
 		)
 
-		for i := range r.hs[t] {
-			dhraw[i] = (1 - r.hs[t][i]*r.hs[t][i]) * dh[i]
+		for i := range hs[t] {
+			dhraw[i] = (1 - hs[t][i]*hs[t][i]) * dh[i]
 		}
 
 		dbh = add(dbh, dhraw)
 		dwxh.Add(dwxh, dotVec(dhraw, xs[t]))
 		if t == 0 {
-			dwhh.Add(dwhh, dotVec(dhraw, r.hs[len(inputs)-1]))
+			dwhh.Add(dwhh, dotVec(dhraw, hs[inputSize-1]))
 		} else {
-			dwhh.Add(dwhh, dotVec(dhraw, r.hs[t-1]))
+			dwhh.Add(dwhh, dotVec(dhraw, hs[t-1]))
 		}
 		dhnext = dot(r.whh.T(), dhraw)
 	}
+
+	return
+}
+
+// Calculate the normalized probability of the second dimension
+// of the array
+func normalizeByRow(ys [][]float64) (ps [][]float64) {
+	inputSize := len(ys)
+	// probabilities for next chars
+	ps = make([][]float64, inputSize)
+	for t := 0; t < inputSize; t++ {
+		ps[t] = make([]float64, len(ys[t]))
+		expYS := exp(ys[t])
+		ps[t] = div(expYS, sum(expYS))
+	}
+	return
+}
+
+// Estimate the loss function between inputs and targets
+// returns the loss and gradients on model parameters
+// The last hidden state is modified
+func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
+	wg := sync.WaitGroup{}
+	inputSize := len(inputs)
+	outputSize := len(targets)
+	// Do the forward pass
+	// do the 1-of-k encoding of the input and the target
+	// xs is len(inputs)*len(vocabulary)
+	xs := make([][]float64, inputSize)
+	ts := make([][]float64, outputSize)
+	for t := 0; t < len(inputs); t++ {
+		xs[t] = make([]float64, r.config.inputNeurons)
+		xs[t][inputs[t]] = 1
+		ts[t] = make([]float64, r.config.outputNeurons)
+		ts[t][targets[t]] = 1
+	}
+	ys, hs := r.forwardPass(xs)
+	ps := normalizeByRow(ys)
+	loss = 0
+	// evaluate the loss softmax (cross-entropy loss)
+	for t := 0; t < inputSize; t++ {
+		loss -= math.Log(ps[t][targets[t]])
+	}
+
+	dwxh, dwhh, dwhy, dbh, dby = r.backPropagation(xs, ps, hs, ts)
 	// Clip to mitigate exploding gradients
 	for _, param := range [][]float64{
 		dwxh.RawMatrix().Data,
@@ -182,7 +213,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 		dbh,
 	} {
 		wg.Add(1)
-		go func() {
+		go func(param []float64) {
 			for i := range param {
 				if param[i] > 5 {
 					param[i] = 5
@@ -192,7 +223,7 @@ func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.D
 				}
 			}
 			wg.Done()
-		}()
+		}(param)
 	}
 	wg.Wait()
 	return
@@ -207,7 +238,6 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 		return -r.config.learningRate * v
 	}
 
-	wg := sync.WaitGroup{}
 	for _, params := range [][3]*mat.Dense{
 		[3]*mat.Dense{
 			r.wxh, dwxh, r.mwxh,
@@ -225,31 +255,26 @@ func (r *rnn) adagrad(dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 			mat.NewDense(len(r.by), 1, r.by), mat.NewDense(len(dby), 1, dby), mat.NewDense(len(r.mby), 1, r.mby),
 		},
 	} {
-		wg.Add(1)
-		go func() {
-			param := params[0]
-			dparam := params[1]
-			mem := params[2]
-			tmp := new(mat.Dense)
-			tmp.MulElem(dparam, dparam)
-			mem.Add(mem, tmp)
-			tmp.Reset()
-			tmp.Apply(memFunc, mem)
-			tmp2 := new(mat.Dense)
-			tmp2.Apply(learningRateFunc, dparam)
-			tmp3 := new(mat.Dense)
-			tmp3.DivElem(tmp2, tmp)
-			param.Add(param, tmp3)
-			wg.Done()
-		}()
+		param := params[0]
+		dparam := params[1]
+		mem := params[2]
+		tmp := new(mat.Dense)
+		tmp.MulElem(dparam, dparam)
+		mem.Add(mem, tmp)
+		tmp.Reset()
+		tmp.Apply(memFunc, mem)
+		tmp2 := new(mat.Dense)
+		tmp2.Apply(learningRateFunc, dparam)
+		tmp3 := new(mat.Dense)
+		tmp3.DivElem(tmp2, tmp)
+		param.Add(param, tmp3)
 	}
-	wg.Wait()
 }
 
 func (r *rnn) sample(seed, n int) []int {
 	res := make([]int, n)
-	h := make([]float64, len(r.hprev))
-	copy(h, r.hprev)
+	h := make([]float64, len(r.h))
+	copy(h, r.h)
 	for i := 0; i < n; i++ {
 		x := make([]float64, r.config.inputNeurons)
 		if i == 0 {
