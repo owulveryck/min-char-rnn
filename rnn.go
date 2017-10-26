@@ -3,7 +3,6 @@ package main
 import (
 	"math"
 	"math/rand"
-	"sync"
 	"time"
 
 	"gonum.org/v1/gonum/mat"
@@ -15,13 +14,15 @@ import (
 // h is the hidden state, which is actually the memory of the RNN
 // bh, and by are the biais vectors respectivly for the hidden layer and the output layer
 type rnn struct {
-	whh    *mat.Dense // size is hiddenDimension * hiddenDimension
-	wxh    *mat.Dense //
-	why    *mat.Dense //
-	h      []float64  // This is the hidden vector that represents the memory of the RNN
-	bh     []float64  // This is the biais
-	by     []float64  // This is the biais
-	config neuralNetConfig
+	whh        *mat.Dense // size is hiddenDimension * hiddenDimension
+	wxh        *mat.Dense //
+	why        *mat.Dense //
+	h          []float64  // This is the hidden vector that represents the memory of the RNN
+	bh         []float64  // This is the biais
+	by         []float64  // This is the biais
+	config     neuralNetConfig
+	adagrad    *adagrad
+	smoothLoss float64
 }
 
 // neuralNetConfig defines our neural network
@@ -66,6 +67,9 @@ func newRNN(config neuralNetConfig) *rnn {
 
 	// initialise the hidden vector to zero
 	rnn.h = make([]float64, config.hiddenNeurons)
+	// Initialise the adaptative gradient object
+	rnn.adagrad = newAdagrad(config)
+	rnn.smoothLoss = -math.Log10(float64(1)/float64(config.inputNeurons)) * float64(config.memorySize)
 
 	return &rnn
 }
@@ -153,56 +157,67 @@ func (r *rnn) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *mat
 	return
 }
 
-// Estimate the loss function between inputs and targets
-// returns the loss and gradients on model parameters
-// The last hidden state is modified
-func (r *rnn) loss(inputs, targets []int) (loss float64, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
-	wg := sync.WaitGroup{}
-	inputSize := len(inputs)
-	outputSize := len(targets)
-	// Do the forward pass
-	// do the 1-of-k encoding of the input and the target
-	// xs is len(inputs)*len(vocabulary)
-	xs := make([][]float64, inputSize)
-	ts := make([][]float64, outputSize)
-	for t := 0; t < len(inputs); t++ {
-		xs[t] = make([]float64, r.config.inputNeurons)
-		xs[t][inputs[t]] = 1
-		ts[t] = make([]float64, r.config.outputNeurons)
-		ts[t][targets[t]] = 1
-	}
-	ys, hs := r.forwardPass(xs)
-	ps := normalizeByRow(ys)
-	loss = 0
-	// evaluate the loss softmax (cross-entropy loss)
-	for t := 0; t < inputSize; t++ {
-		loss -= math.Log(ps[t][targets[t]])
-	}
+// TrainingSet represents an input matrix and the expected
+// result when passed through a rnn
+type TrainingSet struct {
+	inputs  [][]float64
+	targets [][]float64
+}
 
-	dwxh, dwhh, dwhy, dbh, dby = r.backPropagation(xs, ps, hs, ts)
-	// Clip to mitigate exploding gradients
-	for _, param := range [][]float64{
-		dwxh.RawMatrix().Data,
-		dwhh.RawMatrix().Data,
-		dwhy.RawMatrix().Data,
-		dby,
-		dbh,
-	} {
-		wg.Add(1)
-		go func(param []float64) {
-			for i := range param {
-				if param[i] > 5 {
-					param[i] = 5
+func (r *rnn) GetSmoothLoss() float64 {
+	return r.smoothLoss
+}
+
+// train the network.
+// The train mechanisme is launched in a seperate go-routine
+// it is waiting for an input to be sent in the feeding channel
+func (r *rnn) Train() (feed chan TrainingSet) {
+	feed = make(chan TrainingSet, 1)
+	go func(feed chan TrainingSet) {
+		// When we have new data
+		for tset := range feed {
+			// Forward pass
+			xs := tset.inputs
+			ts := tset.targets
+			ys, hs := r.forwardPass(xs)
+			ps := normalizeByRow(ys)
+			// Loss evaluation
+			loss := float64(0)
+			for t := 0; t < len(ps); t++ {
+				l := float64(0)
+				for i := 0; i < len(ps[t]); i++ {
+					l += ps[t][i] * ts[t][i]
 				}
-				if param[i] < -5 {
-					param[i] = -5
-				}
+				loss -= math.Log(l)
 			}
-			wg.Done()
-		}(param)
-	}
-	wg.Wait()
-	return
+			r.smoothLoss = r.smoothLoss*0.999 + loss*0.001
+
+			// Backpass
+			dwxh, dwhh, dwhy, dbh, dby := r.backPropagation(xs, ps, hs, ts)
+			// Clip to mitigate exploding gradients
+			for _, param := range [][]float64{
+				dwxh.RawMatrix().Data,
+				dwhh.RawMatrix().Data,
+				dwhy.RawMatrix().Data,
+				dby,
+				dbh,
+			} {
+				func(param []float64) {
+					for i := range param {
+						if param[i] > 5 {
+							param[i] = 5
+						}
+						if param[i] < -5 {
+							param[i] = -5
+						}
+					}
+				}(param)
+			}
+			// Adaptation
+			r.adagrad.apply(r, dwxh, dwhh, dwhy, dbh, dby)
+		}
+	}(feed)
+	return feed
 }
 
 func (r *rnn) sample(seed, n int) []int {
