@@ -62,3 +62,17 @@ func add(a ...[]float64) []float64 {
 	}
 	return ret
 }
+
+// Calculate the normalized probability of the second dimension
+// of the array
+func normalizeByRow(ys [][]float64) (ps [][]float64) {
+	inputSize := len(ys)
+	// probabilities for next chars
+	ps = make([][]float64, inputSize)
+	for t := 0; t < inputSize; t++ {
+		ps[t] = make([]float64, len(ys[t]))
+		expYS := exp(ys[t])
+		ps[t] = div(expYS, sum(expYS))
+	}
+	return
+}

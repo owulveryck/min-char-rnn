@@ -28,6 +28,8 @@ func main() {
 
 	// Create a new RNNs
 	rnn := newRNN(config)
+	// Create the adaptative gradient object (to initialize the memory)
+	adagrad := newAdagrad(rnn)
 	// Open the sample text file
 	data, err := os.Open("data/input.txt")
 	if err != nil {
@@ -65,7 +67,7 @@ func main() {
 					if n%100 == 0 {
 						log.Printf("Epoch %v, iter %d, loss: %f", epoch, n, smoothLoss)
 					}
-					rnn.adagrad(dwxh, dwhh, dwhy, dbh, dby)
+					adagrad.apply(rnn, dwxh, dwhh, dwhy, dbh, dby)
 					// Do not loose the last element of the vector
 					inputs[0] = inputs[config.memorySize]
 					// the first index is already set, let's restart in the second position
