@@ -2,27 +2,67 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"os"
 	"time"
+
+	"github.com/kelseyhightower/envconfig"
 )
 
-func main() {
-	runesToIx, ixToRunes, err := getVocabIndexesFromFile("data/vocab.txt")
+type configuration struct {
+	HiddenNeurons int     `default:"100" required:"true"`
+	Epochs        int     `default:"100" required:"true"`
+	MemorySize    int     `default:"20" required:"true"`
+	LearningRate  float64 `default:"1e-1" required:"true"`
+}
+
+func usage(err error) error {
+	var conf configuration
+	flag.Usage()
+	err = envconfig.Usage("RNN", &conf)
 	if err != nil {
 		log.Fatal(err)
 	}
+	return err
+}
+
+func main() {
+	vocab := flag.String("vocab", "data/vocab.txt", "the file holds the vocabulary")
+	input := flag.String("input", "data/input.txt", "the input text to train the network")
+	help := flag.Bool("h", false, "display help")
+	flag.Parse()
+	if *help {
+		log.Fatal(usage(nil))
+	}
+	var conf configuration
+	err := envconfig.Process("RNN", &conf)
+	if err != nil {
+		log.Fatal(usage(err))
+	}
+
+	runesToIx, ixToRunes, err := getVocabIndexesFromFile(*vocab)
+	if err != nil {
+		log.Fatal(usage(err))
+	}
+	// Open the sample text file
+	data, err := os.Open(*input)
+	if err != nil {
+		log.Fatal(usage(err))
+	}
+	defer data.Close()
+
 	maxEpoch := 100
 	// Define our network architecture and learning parameters.
 	config := neuralNetConfig{
 		inputNeurons:  len(runesToIx), // the input is the size of the vocabulary
 		outputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
-		hiddenNeurons: 100,
+		hiddenNeurons: 65,
 		numEpochs:     100,
-		memorySize:    25, // This corresponds to seq_length in the initial implementation
+		memorySize:    15, // This corresponds to seq_length in the initial implementation
 		learningRate:  1e-1,
 	}
 
@@ -30,13 +70,6 @@ func main() {
 	rnn := newRNN(config)
 	// Triggering the Training
 	feed := rnn.Train()
-	// Open the sample text file
-	data, err := os.Open("data/input.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer data.Close()
-
 	r := bufio.NewReader(data)
 	tset := TrainingSet{
 		inputs:  make([][]float64, config.memorySize),
@@ -55,6 +88,9 @@ func main() {
 				if err == io.EOF {
 					// Restart the training if it's not the last epoch
 					if epoch < maxEpoch {
+						if _, err := data.Seek(0, io.SeekStart); err != nil {
+							log.Fatal(err)
+						}
 						epoch++
 						break
 					} else {
@@ -82,7 +118,7 @@ func main() {
 		// Feeding the network
 		feed <- tset
 		if n%100 == 0 {
-			log.Printf("Epoch %v, iteration: %v, loss: %v\n", epoch, n, rnn.GetSmoothLoss())
+			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, rnn.GetSmoothLoss())
 		}
 		if n%1000 == 0 {
 			sampling(rnn, config.inputNeurons, ixToRunes)
@@ -94,7 +130,7 @@ func main() {
 func sampling(rnn *rnn, vocabSize int, ixToRunes map[int]rune) {
 	rand.Seed(time.Now().UnixNano())
 	seed := rand.Intn(vocabSize)
-	fmt.Printf("%c", ixToRunes[seed])
+	//fmt.Printf("\n%c", ixToRunes[seed])
 
 	index := rnn.sample(seed, 1000)
 	for _, idx := range index {

@@ -15,7 +15,7 @@ import (
 // h is the hidden state, which is actually the memory of the RNN
 // bh, and by are the biais vectors respectivly for the hidden layer and the output layer
 type rnn struct {
-	sync.RWMutex
+	sync.Mutex
 	whh        *mat.Dense // size is hiddenDimension * hiddenDimension
 	wxh        *mat.Dense //
 	why        *mat.Dense //
@@ -167,9 +167,9 @@ type TrainingSet struct {
 }
 
 func (r *rnn) GetSmoothLoss() float64 {
-	r.RLock()
+	r.Lock()
 	sl := r.smoothLoss
-	r.RUnlock()
+	r.Unlock()
 	return sl
 }
 
@@ -181,62 +181,60 @@ func (r *rnn) Train() (feed chan TrainingSet) {
 	go func(feed chan TrainingSet) {
 		// When we have new data
 		for tset := range feed {
-			func(tset TrainingSet) {
-				// Forward pass
-				xs := tset.inputs
-				ts := tset.targets
-				r.Lock()
-				ys, hs := r.forwardPass(xs)
-				r.Unlock()
-				ps := normalizeByRow(ys)
-				// Loss evaluation
-				loss := float64(0)
-				for t := 0; t < len(ps); t++ {
-					l := float64(0)
-					for i := 0; i < len(ps[t]); i++ {
-						l += ps[t][i] * ts[t][i]
-					}
-					loss -= math.Log(l)
+			// Forward pass
+			xs := tset.inputs
+			ts := tset.targets
+			r.Lock()
+			ys, hs := r.forwardPass(xs)
+			r.Unlock()
+			ps := normalizeByRow(ys)
+			// Loss evaluation
+			loss := float64(0)
+			for t := 0; t < len(ps); t++ {
+				l := float64(0)
+				for i := 0; i < len(ps[t]); i++ {
+					l += ps[t][i] * ts[t][i]
 				}
-				r.Lock()
-				r.smoothLoss = r.smoothLoss*0.999 + loss*0.001
-				r.Unlock()
+				loss -= math.Log(l)
+			}
+			r.Lock()
+			r.smoothLoss = r.smoothLoss*0.999 + loss*0.001
+			r.Unlock()
 
-				// Backpass
-				r.RLock()
-				dwxh, dwhh, dwhy, dbh, dby := r.backPropagation(xs, ps, hs, ts)
-				r.RUnlock()
-				// Clip to mitigate exploding gradients
-				for _, param := range [][]float64{
-					dwxh.RawMatrix().Data,
-					dwhh.RawMatrix().Data,
-					dwhy.RawMatrix().Data,
-					dby,
-					dbh,
-				} {
-					func(param []float64) {
-						for i := range param {
-							if param[i] > 5 {
-								param[i] = 5
-							}
-							if param[i] < -5 {
-								param[i] = -5
-							}
+			// Backpass
+			r.Lock()
+			dwxh, dwhh, dwhy, dbh, dby := r.backPropagation(xs, ps, hs, ts)
+			r.Unlock()
+			// Clip to mitigate exploding gradients
+			for _, param := range [][]float64{
+				dwxh.RawMatrix().Data,
+				dwhh.RawMatrix().Data,
+				dwhy.RawMatrix().Data,
+				dby,
+				dbh,
+			} {
+				func(param []float64) {
+					for i := range param {
+						if param[i] > 5 {
+							param[i] = 5
 						}
-					}(param)
-				}
-				// Adaptation
-				r.Lock()
-				r.adagrad.apply(r, dwxh, dwhh, dwhy, dbh, dby)
-				r.Unlock()
-			}(tset)
+						if param[i] < -5 {
+							param[i] = -5
+						}
+					}
+				}(param)
+			}
+			// Adaptation
+			r.Lock()
+			r.adagrad.apply(r, dwxh, dwhh, dwhy, dbh, dby)
+			r.Unlock()
 		}
 	}(feed)
 	return feed
 }
 
 func (r *rnn) sample(seed, n int) []int {
-	r.RLock()
+	r.Lock()
 	res := make([]int, n)
 	h := make([]float64, len(r.h))
 	copy(h, r.h)
@@ -267,6 +265,6 @@ func (r *rnn) sample(seed, n int) []int {
 		res[i] = bestIdx
 	}
 
-	r.RUnlock()
+	r.Unlock()
 	return res
 }
