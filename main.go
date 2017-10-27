@@ -60,10 +60,13 @@ func main() {
 	config := neuralNetConfig{
 		inputNeurons:  len(runesToIx), // the input is the size of the vocabulary
 		outputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
-		hiddenNeurons: 65,
-		numEpochs:     100,
-		memorySize:    15, // This corresponds to seq_length in the initial implementation
-		learningRate:  1e-1,
+		hiddenNeurons: conf.HiddenNeurons,
+		numEpochs:     conf.Epochs,
+		memorySize:    conf.MemorySize, // This corresponds to seq_length in the initial implementation
+		learningRate:  conf.LearningRate,
+	}
+	if config.outputNeurons > config.hiddenNeurons {
+		log.Fatal("Bad parameter, too few hidden neurons")
 	}
 
 	// Create a new RNNs
