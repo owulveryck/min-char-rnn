@@ -17,7 +17,7 @@ type configuration struct {
 	HiddenNeurons int     `default:"100" required:"true"`
 	Epochs        int     `default:"100" required:"true"`
 	MemorySize    int     `default:"20" required:"true"`
-	LearningRate  float64 `default:"1e-1" required:"true"`
+	LearningRate  float64 `default:"1e-3" required:"true"`
 }
 
 func usage(err error) error {

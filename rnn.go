@@ -63,7 +63,7 @@ func newRNN(config neuralNetConfig) *rnn {
 		for i := range param {
 			randSource := rand.NewSource(time.Now().UnixNano())
 			randGen := rand.New(randSource)
-			param[i] = randGen.NormFloat64() * 0.01
+			param[i] = randGen.NormFloat64() * 1e-4
 		}
 	}
 
