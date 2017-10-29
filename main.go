@@ -12,17 +12,19 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/owulveryck/min-char-rnn/rnn"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 type configuration struct {
-	HiddenNeurons int     `default:"100" required:"true"`
-	Epochs        int     `default:"100" required:"true"`
-	MemorySize    int     `default:"20" required:"true"`
-	LearningRate  float64 `default:"1e-3" required:"true"`
+	Choice     string `default:"soft" required:"true"`
+	Epochs     int    `default:"100" required:"true"`
+	BatchSize  int    `default:"20" required:"true"`
+	SampleSize int    `default:"100" required:"true"`
 }
 
+var conf configuration
+
 func usage(err error) error {
-	var conf configuration
 	flag.Usage()
 	err = envconfig.Usage("RNN", &conf)
 	if err != nil {
@@ -39,7 +41,6 @@ func main() {
 	if *help {
 		log.Fatal(usage(nil))
 	}
-	var conf configuration
 	err := envconfig.Process("RNN", &conf)
 	if err != nil {
 		log.Fatal(usage(err))
@@ -57,36 +58,26 @@ func main() {
 	defer data.Close()
 
 	maxEpoch := 100
-	// Define our network architecture and learning parameters.
-	config := rnn.NeuralNetConfig{
-		InputNeurons:  len(runesToIx), // the input is the size of the vocabulary
-		OutputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
-		HiddenNeurons: conf.HiddenNeurons,
-		NumEpochs:     conf.Epochs,
-		MemorySize:    conf.MemorySize, // This corresponds to seq_length in the initial implementation
-		LearningRate:  conf.LearningRate,
-	}
-	if config.OutputNeurons > config.HiddenNeurons {
-		log.Fatal("Bad parameter, too few hidden neurons")
-	}
+	inputNeurons := len(runesToIx)
+	outputNeurons := len(ixToRunes)
 
 	// Create a new RNNs
-	neuralNet := rnn.NewRNN(config)
+	neuralNet := rnn.NewRNN(inputNeurons, outputNeurons)
 	// Triggering the Training
 	feed := neuralNet.Train()
 	r := bufio.NewReader(data)
 	tset := rnn.TrainingSet{
-		Inputs:  make([][]float64, config.MemorySize),
-		Targets: make([][]float64, config.MemorySize),
+		Inputs:  make([][]float64, conf.BatchSize),
+		Targets: make([][]float64, conf.BatchSize),
 	}
 
 	n := 0
 	epoch := 1
 	for {
 		// Filling a training set
-		for i := 0; i < config.MemorySize+1; i++ {
+		for i := 0; i < conf.BatchSize+1; i++ {
 			// Create the 1-of-k encoder vector
-			oneOfK := make([]float64, config.InputNeurons)
+			oneOfK := make([]float64, inputNeurons)
 			// Read a character
 			if c, _, err := r.ReadRune(); err != nil {
 				if err == io.EOF {
@@ -110,11 +101,11 @@ func main() {
 			switch i {
 			case 0:
 				tset.Inputs[i] = oneOfK
-			case config.MemorySize:
+			case conf.BatchSize:
 				tset.Targets[i-1] = oneOfK
 			default:
-				var copyOfOneOfK []float64
-				copy(copyOfOneOfK, oneOfK)
+				//var copyOfOneOfK []float64
+				// copy(copyOfOneOfK, oneOfK)
 				tset.Inputs[i] = oneOfK
 				tset.Targets[i-1] = oneOfK
 			}
@@ -122,10 +113,10 @@ func main() {
 		// Feeding the network
 		feed <- tset
 		if n%100 == 0 {
-			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, neuralNet.GetSmoothLoss())
+			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, neuralNet.GetLoss())
 		}
 		if n%1000 == 0 {
-			sampling(neuralNet, config.InputNeurons, ixToRunes)
+			sampling(neuralNet, outputNeurons, ixToRunes)
 		}
 		n++
 	}
@@ -135,8 +126,33 @@ func sampling(neuralNet *rnn.RNN, vocabSize int, ixToRunes map[int]rune) {
 	rand.Seed(time.Now().UnixNano())
 	seed := rand.Intn(vocabSize)
 	//fmt.Printf("\n%c", ixToRunes[seed])
+	bestProb := func(p []float64) int {
+		best := float64(0)
+		bestIdx := 0
+		for i, v := range p {
+			if v > best {
+				best = v
+				bestIdx = i
+			}
+		}
+		return bestIdx
+	}
 
-	index := neuralNet.Sample(seed, 1000)
+	randNormalDist := func(p []float64) int {
+		sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
+		return int(sample.Rand())
+	}
+
+	var index []int
+	switch conf.Choice {
+	case "hard":
+		index = neuralNet.Sample(seed, conf.SampleSize, bestProb)
+	case "soft":
+		index = neuralNet.Sample(seed, conf.SampleSize, randNormalDist)
+	default:
+		log.Println("Unknown choice")
+	}
+
 	for _, idx := range index {
 		fmt.Printf("%c", ixToRunes[idx])
 	}

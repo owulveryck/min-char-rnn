@@ -1,13 +1,14 @@
 package rnn
 
 import (
+	"log"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/stat/distuv"
 )
 
 // RNN represents the neural network
@@ -16,41 +17,54 @@ import (
 // bh, and by are the biais vectors respectivly for the hidden layer and the output layer
 type RNN struct {
 	sync.Mutex
-	whh        *mat.Dense // size is hiddenDimension * hiddenDimension
-	wxh        *mat.Dense //
-	why        *mat.Dense //
-	h          []float64  // This is the hidden vector that represents the memory of the RNN
-	bh         []float64  // This is the biais
-	by         []float64  // This is the biais
-	config     NeuralNetConfig
-	adagrad    *adagrad
-	smoothLoss float64
+	whh     *mat.Dense // size is hiddenDimension * hiddenDimension
+	wxh     *mat.Dense //
+	why     *mat.Dense //
+	h       []float64  // This is the hidden vector that represents the memory of the RNN
+	bh      []float64  // This is the biais
+	by      []float64  // This is the biais
+	config  neuralNetConfig
+	adagrad *adagrad
+	loss    float64
+	//smoothLoss float64
 }
 
 // NeuralNetConfig defines our neural network
 // architecture and learning parameters.
-type NeuralNetConfig struct {
-	InputNeurons  int
-	OutputNeurons int
-	HiddenNeurons int
-	MemorySize    int
-	NumEpochs     int
-	LearningRate  float64
+type neuralNetConfig struct {
+	InputNeurons   int
+	OutputNeurons  int
+	HiddenNeurons  int     `default:"100" required:"true"`
+	LearningRate   float64 `default:"1e-1" required:"true"`
+	AdagradEpsilon float64 `default:"1e-8" required:"true"`
+	RandomFactor   float64 `default:"0.01" required":"true"`
+}
+
+var conf neuralNetConfig
+
+func init() {
+	err := envconfig.Process("RNN", &conf)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // NewRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
 // The hidden state h is initialized with the zero vector.
 //func newRNN(x, y, h int) *RNN {
-func NewRNN(config NeuralNetConfig) *RNN {
+func NewRNN(inputNeurons, outputNeurons int) *RNN {
+	//func NewRNN(config NeuralNetConfig) *RNN {
 	var rnn RNN
-	rnn.config = config
+	conf.InputNeurons = inputNeurons
+	conf.OutputNeurons = outputNeurons
+	rnn.config = conf
 	// Initialize biases/weights.
 
-	rnn.wxh = mat.NewDense(config.HiddenNeurons, config.InputNeurons, nil)
-	rnn.whh = mat.NewDense(config.HiddenNeurons, config.HiddenNeurons, nil)
-	rnn.why = mat.NewDense(config.OutputNeurons, config.HiddenNeurons, nil)
-	rnn.bh = make([]float64, config.HiddenNeurons)
-	rnn.by = make([]float64, config.OutputNeurons)
+	rnn.wxh = mat.NewDense(conf.HiddenNeurons, conf.InputNeurons, nil)
+	rnn.whh = mat.NewDense(conf.HiddenNeurons, conf.HiddenNeurons, nil)
+	rnn.why = mat.NewDense(conf.OutputNeurons, conf.HiddenNeurons, nil)
+	rnn.bh = make([]float64, conf.HiddenNeurons)
+	rnn.by = make([]float64, conf.OutputNeurons)
 	wHiddenRaw := rnn.wxh.RawMatrix().Data
 	wHiddenHiddenRaw := rnn.whh.RawMatrix().Data
 	wOutRaw := rnn.why.RawMatrix().Data
@@ -63,15 +77,15 @@ func NewRNN(config NeuralNetConfig) *RNN {
 		for i := range param {
 			randSource := rand.NewSource(time.Now().UnixNano())
 			randGen := rand.New(randSource)
-			param[i] = randGen.NormFloat64() * 1e-4
+			param[i] = randGen.NormFloat64() * conf.RandomFactor
 		}
 	}
 
 	// initialise the hidden vector to zero
-	rnn.h = make([]float64, config.HiddenNeurons)
+	rnn.h = make([]float64, conf.HiddenNeurons)
 	// Initialise the adaptative gradient object
-	rnn.adagrad = newAdagrad(config)
-	rnn.smoothLoss = -math.Log10(float64(1)/float64(config.InputNeurons)) * float64(config.MemorySize)
+	rnn.adagrad = newAdagrad(conf)
+	//rnn.smoothLoss = -math.Log10(float64(1)/float64(config.InputNeurons)) * float64(config.MemorySize)
 
 	return &rnn
 }
@@ -166,12 +180,13 @@ type TrainingSet struct {
 	Targets [][]float64
 }
 
-// GetSmoothLoss returns the current loss of the RNN
-func (r *RNN) GetSmoothLoss() float64 {
+// GetLoss returns the current loss of the RNN
+func (r *RNN) GetLoss() float64 {
 	r.Lock()
-	sl := r.smoothLoss
+	//sl := r.smoothLoss
+	loss := r.loss
 	r.Unlock()
-	return sl
+	return loss
 }
 
 // Train the network.
@@ -199,7 +214,8 @@ func (r *RNN) Train() (feed chan TrainingSet) {
 				loss -= math.Log(l)
 			}
 			r.Lock()
-			r.smoothLoss = r.smoothLoss*0.999 + loss*0.001
+			r.loss += loss
+			//r.smoothLoss = r.smoothLoss*0.999 + loss*0.001
 			r.Unlock()
 
 			// Backpass
@@ -235,20 +251,22 @@ func (r *RNN) Train() (feed chan TrainingSet) {
 }
 
 // Sample the rnn
+// the choose function returns the index choosen, this allows to put
+// some randomness if needed
 // TODO: this function needs to be rewritten
-func (r *RNN) Sample(seed, n int) []int {
-	r.Lock()
+func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
 	res := make([]int, n)
 	h := make([]float64, len(r.h))
 	copy(h, r.h)
+	x := make([]float64, r.config.InputNeurons)
 	for i := 0; i < n; i++ {
-		x := make([]float64, r.config.InputNeurons)
 		if i == 0 {
 			x[seed] = 1
 		} else {
 			x[res[i-1]] = 1
 		}
 
+		r.Lock()
 		h = tanh(
 			add(
 				dot(r.wxh, x),
@@ -260,14 +278,15 @@ func (r *RNN) Sample(seed, n int) []int {
 			dot(r.why, h),
 			r.by,
 		)
+		r.Unlock()
 		expY := exp(y)
 		p := div(expY, sum(expY))
 		// find the best match
-		sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
-		bestIdx := int(sample.Rand())
-		res[i] = bestIdx
+		res[i] = choose(p)
+		//sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
+		//bestIdx := int(sample.Rand())
+		//res[i] = bestIdx
 	}
 
-	r.Unlock()
 	return res
 }
