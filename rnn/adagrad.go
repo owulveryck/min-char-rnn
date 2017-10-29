@@ -19,11 +19,11 @@ type adagrad struct {
 // Create a new adaptative gradient structure suitable to the rnn shape
 func newAdagrad(c neuralNetConfig) *adagrad {
 	a := &adagrad{}
-	a.mwxh = mat.NewDense(c.HiddenNeurons, c.InputNeurons, nil)
+	a.mwxh = mat.NewDense(c.HiddenNeurons, c.inputNeurons, nil)
 	a.mwhh = mat.NewDense(c.HiddenNeurons, c.HiddenNeurons, nil)
-	a.mwhy = mat.NewDense(c.OutputNeurons, c.HiddenNeurons, nil)
+	a.mwhy = mat.NewDense(c.outputNeurons, c.HiddenNeurons, nil)
 	a.mbh = make([]float64, c.HiddenNeurons)
-	a.mby = make([]float64, c.OutputNeurons)
+	a.mby = make([]float64, c.outputNeurons)
 	a.epsilon = c.AdagradEpsilon
 	return a
 }

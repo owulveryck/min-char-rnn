@@ -1,13 +1,11 @@
 package rnn
 
 import (
-	"log"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -25,28 +23,6 @@ type RNN struct {
 	by      []float64  // This is the biais
 	config  neuralNetConfig
 	adagrad *adagrad
-	loss    float64
-	//smoothLoss float64
-}
-
-// NeuralNetConfig defines our neural network
-// architecture and learning parameters.
-type neuralNetConfig struct {
-	InputNeurons   int
-	OutputNeurons  int
-	HiddenNeurons  int     `default:"100" required:"true"`
-	LearningRate   float64 `default:"1e-1" required:"true"`
-	AdagradEpsilon float64 `default:"1e-8" required:"true"`
-	RandomFactor   float64 `default:"0.01" required":"true"`
-}
-
-var conf neuralNetConfig
-
-func init() {
-	err := envconfig.Process("RNN", &conf)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 // NewRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
@@ -55,16 +31,16 @@ func init() {
 func NewRNN(inputNeurons, outputNeurons int) *RNN {
 	//func NewRNN(config NeuralNetConfig) *RNN {
 	var rnn RNN
-	conf.InputNeurons = inputNeurons
-	conf.OutputNeurons = outputNeurons
+	conf.inputNeurons = inputNeurons
+	conf.outputNeurons = outputNeurons
 	rnn.config = conf
 	// Initialize biases/weights.
 
-	rnn.wxh = mat.NewDense(conf.HiddenNeurons, conf.InputNeurons, nil)
+	rnn.wxh = mat.NewDense(conf.HiddenNeurons, conf.inputNeurons, nil)
 	rnn.whh = mat.NewDense(conf.HiddenNeurons, conf.HiddenNeurons, nil)
-	rnn.why = mat.NewDense(conf.OutputNeurons, conf.HiddenNeurons, nil)
+	rnn.why = mat.NewDense(conf.outputNeurons, conf.HiddenNeurons, nil)
 	rnn.bh = make([]float64, conf.HiddenNeurons)
-	rnn.by = make([]float64, conf.OutputNeurons)
+	rnn.by = make([]float64, conf.outputNeurons)
 	wHiddenRaw := rnn.wxh.RawMatrix().Data
 	wHiddenHiddenRaw := rnn.whh.RawMatrix().Data
 	wOutRaw := rnn.why.RawMatrix().Data
@@ -85,7 +61,6 @@ func NewRNN(inputNeurons, outputNeurons int) *RNN {
 	rnn.h = make([]float64, conf.HiddenNeurons)
 	// Initialise the adaptative gradient object
 	rnn.adagrad = newAdagrad(conf)
-	//rnn.smoothLoss = -math.Log10(float64(1)/float64(config.InputNeurons)) * float64(config.MemorySize)
 
 	return &rnn
 }
@@ -119,7 +94,7 @@ func (r *RNN) forwardPass(xs [][]float64) (ys, hs [][]float64) {
 	hs = make([][]float64, inputSize)
 	for t := 0; t < inputSize; t++ {
 		// Initialization of the arrays
-		ys[t] = make([]float64, r.config.OutputNeurons)
+		ys[t] = make([]float64, r.config.outputNeurons)
 		hs[t] = make([]float64, r.config.HiddenNeurons)
 		ys[t] = r.step(xs[t])
 		hs[t] = r.h
@@ -134,16 +109,16 @@ func (r *RNN) forwardPass(xs [][]float64) (ys, hs [][]float64) {
 // hs is a matrix of hidden vector
 func (r *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 	inputSize := len(xs)
-	dwxh = mat.NewDense(r.config.HiddenNeurons, r.config.InputNeurons, nil)
+	dwxh = mat.NewDense(r.config.HiddenNeurons, r.config.inputNeurons, nil)
 	dwhh = mat.NewDense(r.config.HiddenNeurons, r.config.HiddenNeurons, nil)
-	dwhy = mat.NewDense(r.config.OutputNeurons, r.config.HiddenNeurons, nil)
-	dhnext := make([]float64, r.config.OutputNeurons)
+	dwhy = mat.NewDense(r.config.outputNeurons, r.config.HiddenNeurons, nil)
+	dhnext := make([]float64, r.config.outputNeurons)
 	dbh = make([]float64, r.config.HiddenNeurons)
-	dby = make([]float64, r.config.OutputNeurons)
+	dby = make([]float64, r.config.outputNeurons)
 	dhraw := make([]float64, len(hs[0]))
 
 	for t := inputSize - 1; t >= 0; t-- {
-		dy := make([]float64, r.config.OutputNeurons)
+		dy := make([]float64, r.config.outputNeurons)
 		for i := range ps[t] {
 			dy[i] = ps[t][i] - ts[t][i]
 		}
@@ -180,21 +155,13 @@ type TrainingSet struct {
 	Targets [][]float64
 }
 
-// GetLoss returns the current loss of the RNN
-func (r *RNN) GetLoss() float64 {
-	r.Lock()
-	//sl := r.smoothLoss
-	loss := r.loss
-	r.Unlock()
-	return loss
-}
-
 // Train the network.
 // The train mechanisme is launched in a seperate go-routine
 // it is waiting for an input to be sent in the feeding channel
-func (r *RNN) Train() (feed chan TrainingSet) {
+func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 	feed = make(chan TrainingSet, 1)
-	go func(feed chan TrainingSet) {
+	info = make(chan float64, 1)
+	go func(feed chan TrainingSet, info chan float64) {
 		// When we have new data
 		for tset := range feed {
 			// Forward pass
@@ -213,10 +180,10 @@ func (r *RNN) Train() (feed chan TrainingSet) {
 				}
 				loss -= math.Log(l)
 			}
-			r.Lock()
-			r.loss += loss
-			//r.smoothLoss = r.smoothLoss*0.999 + loss*0.001
-			r.Unlock()
+			select {
+			case info <- loss:
+			default:
+			}
 
 			// Backpass
 			r.Lock()
@@ -246,8 +213,8 @@ func (r *RNN) Train() (feed chan TrainingSet) {
 			r.adagrad.apply(r, dwxh, dwhh, dwhy, dbh, dby)
 			r.Unlock()
 		}
-	}(feed)
-	return feed
+	}(feed, info)
+	return feed, info
 }
 
 // Sample the rnn
@@ -258,7 +225,7 @@ func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
 	res := make([]int, n)
 	h := make([]float64, len(r.h))
 	copy(h, r.h)
-	x := make([]float64, r.config.InputNeurons)
+	x := make([]float64, r.config.inputNeurons)
 	for i := 0; i < n; i++ {
 		if i == 0 {
 			x[seed] = 1

@@ -85,6 +85,7 @@ n, p = 0, 0
 mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
 mbh, mby = np.zeros_like(bh), np.zeros_like(by) # memory variables for Adagrad
 smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
+print smooth_loss
 exit
 while True:
   # prepare inputs (we're sweeping from left to right in steps seq_length long)

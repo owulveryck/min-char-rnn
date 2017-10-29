@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"time"
@@ -26,7 +27,7 @@ var conf configuration
 
 func usage(err error) error {
 	flag.Usage()
-	err = envconfig.Usage("RNN", &conf)
+	err = envconfig.Usage("MIN_CHAR", &conf)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,7 +42,11 @@ func main() {
 	if *help {
 		log.Fatal(usage(nil))
 	}
-	err := envconfig.Process("RNN", &conf)
+	err := envconfig.Usage("MIN_CHAR", &conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = envconfig.Process("MIN_CHAR", &conf)
 	if err != nil {
 		log.Fatal(usage(err))
 	}
@@ -64,7 +69,7 @@ func main() {
 	// Create a new RNNs
 	neuralNet := rnn.NewRNN(inputNeurons, outputNeurons)
 	// Triggering the Training
-	feed := neuralNet.Train()
+	feed, info := neuralNet.Train()
 	r := bufio.NewReader(data)
 	tset := rnn.TrainingSet{
 		Inputs:  make([][]float64, conf.BatchSize),
@@ -73,6 +78,9 @@ func main() {
 
 	n := 0
 	epoch := 1
+	// loss at iteration 0
+	smoothLoss := -math.Log(float64(1)/float64(len(runesToIx))) * float64(conf.BatchSize)
+	log.Println(smoothLoss)
 	for {
 		// Filling a training set
 		for i := 0; i < conf.BatchSize+1; i++ {
@@ -112,8 +120,12 @@ func main() {
 		}
 		// Feeding the network
 		feed <- tset
+		loss := <-info
+
+		smoothLoss = smoothLoss*0.999 + loss*0.001
 		if n%100 == 0 {
-			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, neuralNet.GetLoss())
+			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, smoothLoss)
+			//fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, neuralNet.GetLoss())
 		}
 		if n%1000 == 0 {
 			sampling(neuralNet, outputNeurons, ixToRunes)
