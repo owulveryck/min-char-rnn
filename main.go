@@ -17,10 +17,11 @@ import (
 )
 
 type configuration struct {
-	Choice     string `default:"soft" required:"true"`
-	Epochs     int    `default:"100" required:"true"`
-	BatchSize  int    `default:"20" required:"true"`
-	SampleSize int    `default:"100" required:"true"`
+	Choice          string `default:"soft" required:"true"`
+	Epochs          int    `default:"100" required:"true"`
+	BatchSize       int    `default:"20" required:"true"`
+	SampleSize      int    `default:"100" required:"true"`
+	SampleFrequency int    `default:"1000" required:"true"`
 }
 
 var conf configuration
@@ -112,8 +113,6 @@ func main() {
 			case conf.BatchSize:
 				tset.Targets[i-1] = oneOfK
 			default:
-				//var copyOfOneOfK []float64
-				// copy(copyOfOneOfK, oneOfK)
 				tset.Inputs[i] = oneOfK
 				tset.Targets[i-1] = oneOfK
 			}
@@ -125,9 +124,8 @@ func main() {
 		smoothLoss = smoothLoss*0.999 + loss*0.001
 		if n%100 == 0 {
 			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, smoothLoss)
-			//fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, neuralNet.GetLoss())
 		}
-		if n%1000 == 0 {
+		if n%conf.SampleFrequency == 0 {
 			sampling(neuralNet, outputNeurons, ixToRunes)
 		}
 		n++
