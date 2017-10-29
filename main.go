@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
+	"github.com/owulveryck/min-char-rnn/rnn"
 )
 
 type configuration struct {
@@ -57,35 +58,35 @@ func main() {
 
 	maxEpoch := 100
 	// Define our network architecture and learning parameters.
-	config := neuralNetConfig{
-		inputNeurons:  len(runesToIx), // the input is the size of the vocabulary
-		outputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
-		hiddenNeurons: conf.HiddenNeurons,
-		numEpochs:     conf.Epochs,
-		memorySize:    conf.MemorySize, // This corresponds to seq_length in the initial implementation
-		learningRate:  conf.LearningRate,
+	config := rnn.NeuralNetConfig{
+		InputNeurons:  len(runesToIx), // the input is the size of the vocabulary
+		OutputNeurons: len(runesToIx), // the output size is also the size of the vocablulary
+		HiddenNeurons: conf.HiddenNeurons,
+		NumEpochs:     conf.Epochs,
+		MemorySize:    conf.MemorySize, // This corresponds to seq_length in the initial implementation
+		LearningRate:  conf.LearningRate,
 	}
-	if config.outputNeurons > config.hiddenNeurons {
+	if config.OutputNeurons > config.HiddenNeurons {
 		log.Fatal("Bad parameter, too few hidden neurons")
 	}
 
 	// Create a new RNNs
-	rnn := newRNN(config)
+	neuralNet := rnn.NewRNN(config)
 	// Triggering the Training
-	feed := rnn.Train()
+	feed := neuralNet.Train()
 	r := bufio.NewReader(data)
-	tset := TrainingSet{
-		inputs:  make([][]float64, config.memorySize),
-		targets: make([][]float64, config.memorySize),
+	tset := rnn.TrainingSet{
+		Inputs:  make([][]float64, config.MemorySize),
+		Targets: make([][]float64, config.MemorySize),
 	}
 
 	n := 0
 	epoch := 1
 	for {
 		// Filling a training set
-		for i := 0; i < config.memorySize+1; i++ {
+		for i := 0; i < config.MemorySize+1; i++ {
 			// Create the 1-of-k encoder vector
-			oneOfK := make([]float64, config.inputNeurons)
+			oneOfK := make([]float64, config.InputNeurons)
 			// Read a character
 			if c, _, err := r.ReadRune(); err != nil {
 				if err == io.EOF {
@@ -108,34 +109,34 @@ func main() {
 
 			switch i {
 			case 0:
-				tset.inputs[i] = oneOfK
-			case config.memorySize:
-				tset.targets[i-1] = oneOfK
+				tset.Inputs[i] = oneOfK
+			case config.MemorySize:
+				tset.Targets[i-1] = oneOfK
 			default:
 				var copyOfOneOfK []float64
 				copy(copyOfOneOfK, oneOfK)
-				tset.inputs[i] = oneOfK
-				tset.targets[i-1] = oneOfK
+				tset.Inputs[i] = oneOfK
+				tset.Targets[i-1] = oneOfK
 			}
 		}
 		// Feeding the network
 		feed <- tset
 		if n%100 == 0 {
-			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, rnn.GetSmoothLoss())
+			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, neuralNet.GetSmoothLoss())
 		}
 		if n%1000 == 0 {
-			sampling(rnn, config.inputNeurons, ixToRunes)
+			sampling(neuralNet, config.InputNeurons, ixToRunes)
 		}
 		n++
 	}
 }
 
-func sampling(rnn *rnn, vocabSize int, ixToRunes map[int]rune) {
+func sampling(neuralNet *rnn.RNN, vocabSize int, ixToRunes map[int]rune) {
 	rand.Seed(time.Now().UnixNano())
 	seed := rand.Intn(vocabSize)
 	//fmt.Printf("\n%c", ixToRunes[seed])
 
-	index := rnn.sample(seed, 1000)
+	index := neuralNet.Sample(seed, 1000)
 	for _, idx := range index {
 		fmt.Printf("%c", ixToRunes[idx])
 	}

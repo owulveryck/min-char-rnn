@@ -1,4 +1,4 @@
-package main
+package rnn
 
 import (
 	"math"
@@ -16,23 +16,23 @@ type adagrad struct {
 }
 
 // Create a new adaptative gradient structure suitable to the rnn shape
-func newAdagrad(c neuralNetConfig) *adagrad {
+func newAdagrad(c NeuralNetConfig) *adagrad {
 	a := &adagrad{}
-	a.mwxh = mat.NewDense(c.hiddenNeurons, c.inputNeurons, nil)
-	a.mwhh = mat.NewDense(c.hiddenNeurons, c.hiddenNeurons, nil)
-	a.mwhy = mat.NewDense(c.outputNeurons, c.hiddenNeurons, nil)
-	a.mbh = make([]float64, c.hiddenNeurons)
-	a.mby = make([]float64, c.outputNeurons)
+	a.mwxh = mat.NewDense(c.HiddenNeurons, c.InputNeurons, nil)
+	a.mwhh = mat.NewDense(c.HiddenNeurons, c.HiddenNeurons, nil)
+	a.mwhy = mat.NewDense(c.OutputNeurons, c.HiddenNeurons, nil)
+	a.mbh = make([]float64, c.HiddenNeurons)
+	a.mby = make([]float64, c.OutputNeurons)
 	return a
 }
 
 // apply the Adaptative gradient to the rnn
-func (a *adagrad) apply(r *rnn, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
+func (a *adagrad) apply(r *RNN, dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
 	memFunc := func(_, _ int, v float64) float64 {
 		return math.Sqrt(v + 1e-8)
 	}
 	learningRateFunc := func(_, _ int, v float64) float64 {
-		return -r.config.learningRate * v
+		return -r.config.LearningRate * v
 	}
 
 	for _, params := range [][3]*mat.Dense{

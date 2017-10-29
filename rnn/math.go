@@ -1,4 +1,4 @@
-package main
+package rnn
 
 import (
 	"math"
