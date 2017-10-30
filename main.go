@@ -63,7 +63,6 @@ func main() {
 	}
 	defer data.Close()
 
-	maxEpoch := 100
 	inputNeurons := len(runesToIx)
 	outputNeurons := len(ixToRunes)
 
@@ -91,7 +90,7 @@ func main() {
 			if c, _, err := r.ReadRune(); err != nil {
 				if err == io.EOF {
 					// Restart the training if it's not the last epoch
-					if epoch < maxEpoch {
+					if epoch < conf.Epochs {
 						if _, err := data.Seek(0, io.SeekStart); err != nil {
 							log.Fatal(err)
 						}

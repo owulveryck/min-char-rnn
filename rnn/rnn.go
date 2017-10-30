@@ -11,16 +11,18 @@ import (
 
 // RNN represents the neural network
 // This RNNs parameters are the three matrices whh, wxh, why.
-// h is the hidden state, which is actually the memory of the RNN
+// hprev is the last known hidden vector, which is actually the memory of the RNN
 // bh, and by are the biais vectors respectivly for the hidden layer and the output layer
 type RNN struct {
 	sync.Mutex
-	whh     *mat.Dense // size is hiddenDimension * hiddenDimension
-	wxh     *mat.Dense //
-	why     *mat.Dense //
-	h       []float64  // This is the hidden vector that represents the memory of the RNN
-	bh      []float64  // This is the biais
-	by      []float64  // This is the biais
+	whh *mat.Dense // size is hiddenDimension * hiddenDimension
+	wxh *mat.Dense //
+	why *mat.Dense //
+	// This is the last known hidden vector that represents the memory of the RNN
+	// This is used only for training
+	hprev   []float64
+	bh      []float64 // This is the biais
+	by      []float64 // This is the biais
 	config  neuralNetConfig
 	adagrad *adagrad
 }
@@ -58,7 +60,7 @@ func NewRNN(inputNeurons, outputNeurons int) *RNN {
 	}
 
 	// initialise the hidden vector to zero
-	rnn.h = make([]float64, conf.HiddenNeurons)
+	rnn.hprev = make([]float64, conf.HiddenNeurons)
 	// Initialise the adaptative gradient object
 	rnn.adagrad = newAdagrad(conf)
 
@@ -71,23 +73,26 @@ func NewRNN(inputNeurons, outputNeurons int) *RNN {
 // not only by the input you just fed in,
 // but also on the entire history of inputs you’ve fed in in the past.
 // Written as a class, the RNN’s API consists of a single step function:
-func (r *RNN) step(x []float64) (y []float64) {
-	r.h = tanh(
+func (r *RNN) step(x, hprev []float64) (y, h []float64) {
+	r.Lock()
+	h = tanh(
 		add(
 			dot(r.wxh, x),
-			dot(r.whh, r.h),
+			dot(r.whh, hprev),
 			r.bh,
 		))
-	return add(
-		dot(r.why, r.h),
+	y = add(
+		dot(r.why, h),
 		r.by)
+	r.Unlock()
+	return
 }
 
 // forwardPass takes a matrix of inputs and returns
 // the corresponding outputs matrix
 // and a matrix of the hidden states that will be used
 // for the backpropagation
-func (r *RNN) forwardPass(xs [][]float64) (ys, hs [][]float64) {
+func (r *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) {
 	inputSize := len(xs)
 	// un-normalized log probabilities for next chars
 	ys = make([][]float64, inputSize)
@@ -96,8 +101,8 @@ func (r *RNN) forwardPass(xs [][]float64) (ys, hs [][]float64) {
 		// Initialization of the arrays
 		ys[t] = make([]float64, r.config.outputNeurons)
 		hs[t] = make([]float64, r.config.HiddenNeurons)
-		ys[t] = r.step(xs[t])
-		hs[t] = r.h
+		ys[t], hs[t] = r.step(xs[t], hprev)
+		hprev = hs[t]
 	}
 	return
 }
@@ -126,6 +131,7 @@ func (r *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *mat
 			dotVec(dy, hs[t]),
 		)
 		dby = add(dby, dy)
+
 		dh := add(
 			dot(r.why.T(), dy),
 			dhnext,
@@ -167,8 +173,10 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 			// Forward pass
 			xs := tset.Inputs
 			ts := tset.Targets
+			ys, hs := r.forwardPass(xs, r.hprev)
+			// Save the last state for future training
 			r.Lock()
-			ys, hs := r.forwardPass(xs)
+			r.hprev = hs[len(hs)-1]
 			r.Unlock()
 			ps := normalizeByRow(ys)
 			// Loss evaluation
@@ -180,6 +188,7 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 				}
 				loss -= math.Log(l)
 			}
+			// Send info on a non blocking channel
 			select {
 			case info <- loss:
 			default:
@@ -223,9 +232,10 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 // TODO: this function needs to be rewritten
 func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
 	res := make([]int, n)
-	h := make([]float64, len(r.h))
-	copy(h, r.h)
+	h := make([]float64, len(r.hprev))
+	//copy(h, r.hprev)
 	x := make([]float64, r.config.inputNeurons)
+	y := make([]float64, r.config.outputNeurons)
 	for i := 0; i < n; i++ {
 		if i == 0 {
 			x[seed] = 1
@@ -233,26 +243,10 @@ func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
 			x[res[i-1]] = 1
 		}
 
-		r.Lock()
-		h = tanh(
-			add(
-				dot(r.wxh, x),
-				dot(r.whh, h),
-				r.bh,
-			),
-		)
-		y := add(
-			dot(r.why, h),
-			r.by,
-		)
-		r.Unlock()
+		y, h = r.step(x, h)
 		expY := exp(y)
 		p := div(expY, sum(expY))
-		// find the best match
 		res[i] = choose(p)
-		//sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
-		//bestIdx := int(sample.Rand())
-		//res[i] = bestIdx
 	}
 
 	return res
