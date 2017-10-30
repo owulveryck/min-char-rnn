@@ -20,11 +20,10 @@ type RNN struct {
 	why *mat.Dense //
 	// This is the last known hidden vector that represents the memory of the RNN
 	// This is used only for training
-	hprev   []float64
-	bh      []float64 // This is the biais
-	by      []float64 // This is the biais
-	config  neuralNetConfig
-	adagrad *adagrad
+	hprev  []float64
+	bh     []float64 // This is the biais
+	by     []float64 // This is the biais
+	config neuralNetConfig
 }
 
 // NewRNN creates a new RNN with input size of x, outputsize of y and hidden dimension of h
@@ -61,8 +60,6 @@ func NewRNN(inputNeurons, outputNeurons int) *RNN {
 
 	// initialise the hidden vector to zero
 	rnn.hprev = make([]float64, conf.HiddenNeurons)
-	// Initialise the adaptative gradient object
-	rnn.adagrad = newAdagrad(conf)
 
 	return &rnn
 }
@@ -171,6 +168,8 @@ type TrainingSet struct {
 func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 	feed = make(chan TrainingSet, 1)
 	info = make(chan float64, 1)
+
+	adagrad := newAdagrad(r.config)
 	go func(feed chan TrainingSet, info chan float64) {
 		// When we have new data
 		for tset := range feed {
@@ -223,7 +222,7 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 			}
 			// Adaptation
 			r.Lock()
-			r.adagrad.apply(r, dwxh, dwhh, dwhy, dbh, dby)
+			adagrad.apply(r, dwxh, dwhh, dwhy, dbh, dby)
 			r.Unlock()
 		}
 	}(feed, info)
