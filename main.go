@@ -162,9 +162,10 @@ func sampling(neuralNet *rnn.RNN, vocabSize int, ixToRunes map[int]rune) {
 		log.Println("Unknown choice")
 	}
 
+	fmt.Printf("\n------------\n")
 	for _, idx := range index {
 		fmt.Printf("%c", ixToRunes[idx])
 	}
-	fmt.Println("")
+	fmt.Printf("\n------------\n")
 
 }

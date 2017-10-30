@@ -94,6 +94,10 @@ func (r *RNN) step(x, hprev []float64) (y, h []float64) {
 // for the backpropagation
 func (r *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) {
 	inputSize := len(xs)
+	hp := make([]float64, len(hprev))
+	r.Lock()
+	copy(hp, hprev)
+	r.Unlock()
 	// un-normalized log probabilities for next chars
 	ys = make([][]float64, inputSize)
 	hs = make([][]float64, inputSize)
@@ -101,8 +105,8 @@ func (r *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) 
 		// Initialization of the arrays
 		ys[t] = make([]float64, r.config.outputNeurons)
 		hs[t] = make([]float64, r.config.HiddenNeurons)
-		ys[t], hs[t] = r.step(xs[t], hprev)
-		hprev = hs[t]
+		ys[t], hs[t] = r.step(xs[t], hp)
+		hp = hs[t]
 	}
 	return
 }
