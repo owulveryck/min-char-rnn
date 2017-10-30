@@ -174,8 +174,10 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 		// When we have new data
 		for tset := range feed {
 			// Forward pass
-			xs := tset.Inputs
-			ts := tset.Targets
+			xs := make([][]float64, len(tset.Inputs))
+			copy(xs, tset.Inputs)
+			ts := make([][]float64, len(tset.Targets))
+			copy(ts, tset.Targets)
 			ys, hs := r.forwardPass(xs, r.hprev)
 			// Save the last state for future training
 			r.Lock()
