@@ -48,7 +48,7 @@ func (rnn *RNN) GobDecode(b []byte) error {
 	}
 	var backup bkp
 	err := dec.Decode(&backup)
-	if err != nil {
+	if err == nil {
 		rnn.whh = backup.Whh
 		rnn.why = backup.Why
 		rnn.wxh = backup.Wxh
