@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -60,16 +62,25 @@ func main() {
 		if err != nil {
 			log.Fatal("Cannot read backup file", err)
 		}
-		err = neuralNet.GobDecode(b)
+		bkp := bkpStruct{}
+		backupBytes := bytes.NewBuffer(b)
+		dec := gob.NewDecoder(backupBytes) // Will read from network.getVocabIndexesFromFile(
+		err = dec.Decode(&bkp)
+		if err != nil {
+			log.Fatal("Cannot decode backup", err)
+		}
+		err = neuralNet.GobDecode(bkp.RNN)
 		if err != nil {
 			log.Fatal("Cannot decode backup", err)
 		}
 
-		runesToIx, ixToRunes, err := getVocabIndexesFromFile(*vocab)
-		if err != nil {
-			log.Fatal(usage(err))
-		}
-		sample := newSample(ixToRunes, runesToIx, *start, *endRegexp, conf.Choice, *num)
+		sample := newSample(bkp.IxToRunes, bkp.RunesToIx, *start, *endRegexp, conf.Choice, *num)
 		sample.sampling(neuralNet)
 	}
+}
+
+type bkpStruct struct {
+	RNN       []byte
+	IxToRunes map[int]rune
+	RunesToIx map[rune]int
 }
