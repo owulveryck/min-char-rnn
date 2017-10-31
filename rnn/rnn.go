@@ -79,6 +79,7 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 		By     []float64 // This is the biais
 		Config neuralNetConfig
 	}
+	rnn.Lock()
 	err := enc.Encode(bkp{
 		rnn.whh,
 		rnn.wxh,
@@ -88,6 +89,7 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 		rnn.by,
 		rnn.config,
 	})
+	rnn.Unlock()
 	return output.Bytes(), err
 }
 
