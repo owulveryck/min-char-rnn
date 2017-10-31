@@ -112,8 +112,18 @@ func training(vocab, input, start, endRegexp, restore, backup *string, num *int)
 					log.Println("Cannot backup", err)
 				}
 			}
-
 		}
 		n++
 	}
+	if *backup != "" {
+		b, err := neuralNet.GobEncode()
+		if err != nil {
+			log.Println("Cannot backup", err)
+		}
+		err = ioutil.WriteFile(*backup, b, 0644)
+		if err != nil {
+			log.Println("Cannot backup", err)
+		}
+	}
+
 }
