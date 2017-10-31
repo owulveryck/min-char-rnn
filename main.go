@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
@@ -41,6 +42,8 @@ func main() {
 	vocab := flag.String("vocab", "data/vocab.txt", "the file holds the vocabulary")
 	input := flag.String("input", "data/input.txt", "the input text to train the network")
 	start := flag.String("sampleStart", "Hello,", "the input text to train the network")
+	backup := flag.String("backup", "backup.bin", "backup file")
+	restore := flag.String("restore", "", "backup file to restore")
 	num := flag.Int("sampleSize", 500, "size of the sample to generate")
 	endRegexp := flag.String("sampleEndRegexp", "", "If ca generated char match the regexp, it stops")
 	help := flag.Bool("h", false, "display help")
@@ -75,6 +78,16 @@ func main() {
 
 	// Create a new RNNs
 	neuralNet := rnn.NewRNN(inputNeurons, outputNeurons)
+	if *restore != "" {
+		b, err := ioutil.ReadFile(*restore)
+		if err != nil {
+			log.Fatal("Cannot read backup file", err)
+		}
+		err = neuralNet.GobDecode(b)
+		if err != nil {
+			log.Fatal("Cannot decode backup", err)
+		}
+	}
 	// Triggering the Training
 	feed, info := neuralNet.Train()
 	r := bufio.NewReader(data)
@@ -133,6 +146,17 @@ func main() {
 		}
 		if n%conf.SampleFrequency == 0 {
 			sample.sampling(neuralNet)
+			if *backup != "" {
+				b, err := neuralNet.GobEncode()
+				if err != nil {
+					log.Println("Cannot backup", err)
+				}
+				err = ioutil.WriteFile(*backup, b, 0644)
+				if err != nil {
+					log.Println("Cannot backup", err)
+				}
+			}
+
 		}
 		n++
 	}
