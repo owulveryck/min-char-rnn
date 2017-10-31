@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io/ioutil"
 	"log"
 
 	"github.com/kelseyhightower/envconfig"
@@ -53,12 +54,23 @@ func main() {
 	case true:
 		training(vocab, input, start, endRegexp, restore, backup, num)
 	case false:
+		var neuralNet *rnn.RNN
+		if *restore == "" {
+			log.Fatal("please specify the rnn backup to use")
+		}
+		b, err := ioutil.ReadFile(*restore)
+		if err != nil {
+			log.Fatal("Cannot read backup file", err)
+		}
+		err = neuralNet.GobDecode(b)
+		if err != nil {
+			log.Fatal("Cannot decode backup", err)
+		}
 
 		runesToIx, ixToRunes, err := getVocabIndexesFromFile(*vocab)
 		if err != nil {
 			log.Fatal(usage(err))
 		}
-		var neuralNet *rnn.RNN
 		sample := newSample(ixToRunes, runesToIx, *start, *endRegexp, conf.Choice, *num)
 		sample.sampling(neuralNet)
 	}
