@@ -129,7 +129,7 @@ func main() {
 
 		smoothLoss = smoothLoss*0.999 + loss*0.001
 		if n%100 == 0 {
-			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, smoothLoss)
+			log.Printf("Epoch %v, iteration: %v, loss: %v", epoch, n, smoothLoss)
 		}
 		if n%conf.SampleFrequency == 0 {
 			sample.sampling(neuralNet)
