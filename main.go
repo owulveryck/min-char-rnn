@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -38,6 +40,9 @@ func usage(err error) error {
 func main() {
 	vocab := flag.String("vocab", "data/vocab.txt", "the file holds the vocabulary")
 	input := flag.String("input", "data/input.txt", "the input text to train the network")
+	start := flag.String("sampleStart", "Hello,", "the input text to train the network")
+	num := flag.Int("sampleSize", 500, "size of the sample to generate")
+	endRegexp := flag.String("sampleEndRegexp", "", "If ca generated char match the regexp, it stops")
 	help := flag.Bool("h", false, "display help")
 	flag.Parse()
 	if *help {
@@ -62,6 +67,8 @@ func main() {
 		log.Fatal(usage(err))
 	}
 	defer data.Close()
+	// Create the sampling object
+	sample := newSample(ixToRunes, runesToIx, *start, *endRegexp, conf.Choice, *num)
 
 	inputNeurons := len(runesToIx)
 	outputNeurons := len(ixToRunes)
@@ -125,46 +132,88 @@ func main() {
 			fmt.Printf("Epoch %v, iteration: %v, loss: %v\r", epoch, n, smoothLoss)
 		}
 		if n%conf.SampleFrequency == 0 {
-			sampling(neuralNet, outputNeurons, ixToRunes)
+			sample.sampling(neuralNet)
 		}
 		n++
 	}
 }
 
-func sampling(neuralNet *rnn.RNN, vocabSize int, ixToRunes map[int]rune) {
-	rand.Seed(time.Now().UnixNano())
-	seed := rand.Intn(vocabSize)
-	//fmt.Printf("\n%c", ixToRunes[seed])
-	bestProb := func(p []float64) int {
-		best := float64(0)
-		bestIdx := 0
-		for i, v := range p {
-			if v > best {
-				best = v
-				bestIdx = i
+type sample struct {
+	ixToRune     map[int]rune
+	runeToIx     map[rune]int
+	sampleStart  [][]float64 // The sampling in form of an array of 1-of-k encoded chars
+	numChars     int
+	endRegexp    *regexp.Regexp
+	distribution func(p []float64) int // This is for the character generation
+}
+
+func newSample(ixToRune map[int]rune, runesToIx map[rune]int, start, end, choice string, num int) *sample {
+	s := &sample{}
+	// check if end is a number of characters
+	s.numChars = num
+	if end != "" {
+		s.endRegexp = regexp.MustCompile(end)
+	}
+	xs := make([][]float64, 0)
+	r := bufio.NewReader(bytes.NewBufferString(start))
+	for {
+		oneOfK := make([]float64, len(runesToIx))
+		if c, _, err := r.ReadRune(); err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return nil
 			}
+		} else {
+			oneOfK[runesToIx[c]] = 1
+			xs = append(xs, oneOfK)
 		}
-		return bestIdx
 	}
 
-	randNormalDist := func(p []float64) int {
-		sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
-		return int(sample.Rand())
-	}
-
-	var index []int
-	switch conf.Choice {
+	s.sampleStart = xs
+	s.ixToRune = ixToRune
+	s.runeToIx = runesToIx
+	switch choice {
 	case "hard":
-		index = neuralNet.Sample(seed, conf.SampleSize, bestProb)
+		s.distribution = func(p []float64) int {
+			best := float64(0)
+			bestIdx := 0
+			for i, v := range p {
+				if v > best {
+					best = v
+					bestIdx = i
+				}
+			}
+			return bestIdx
+		}
 	case "soft":
-		index = neuralNet.Sample(seed, conf.SampleSize, randNormalDist)
+		s.distribution = func(p []float64) int {
+			sample := distuv.NewCategorical(p, rand.New(rand.NewSource(time.Now().UnixNano())))
+			return int(sample.Rand())
+		}
+
 	default:
 		log.Println("Unknown choice")
+		return nil
 	}
+
+	return s
+}
+
+func (s *sample) sampling(neuralNet *rnn.RNN) {
+
+	var index []int
+	index = neuralNet.Sample(s.sampleStart, s.numChars, s.distribution)
 
 	fmt.Printf("\n------------\n")
 	for _, idx := range index {
-		fmt.Printf("%c", ixToRunes[idx])
+		str := fmt.Sprintf("%c", s.ixToRune[idx])
+		fmt.Printf("%v", str)
+		if s.endRegexp != nil {
+			if s.endRegexp.MatchString(str) {
+				break
+			}
+		}
 	}
 	fmt.Printf("\n------------\n")
 

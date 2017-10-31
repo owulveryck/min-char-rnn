@@ -229,18 +229,15 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 }
 
 // Sample the rnn
-// the choose function returns the index choosen, this allows to put
-// some randomness if needed
-// TODO: this function needs to be rewritten
-func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
-	res := make([]int, n)
+func (r *RNN) Sample(xs [][]float64, n int, choose func([]float64) int) []int {
+	res := make([]int, n+len(xs))
 	h := make([]float64, len(r.hprev))
 	//copy(h, r.hprev)
 	y := make([]float64, r.config.outputNeurons)
 	for i := 0; i < n; i++ {
 		x := make([]float64, r.config.inputNeurons)
-		if i == 0 {
-			x[seed] = 1
+		if i < len(xs) {
+			copy(x, xs[i])
 		} else {
 			x[res[i-1]] = 1
 		}
@@ -250,7 +247,15 @@ func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
 		copy(h, hr)
 		expY := exp(y)
 		p := div(expY, sum(expY))
-		res[i] = choose(p)
+		if i < len(xs) {
+			for j := 0; j < len(xs[i]); j++ {
+				if xs[i][j] == float64(1) {
+					res[i] = j
+				}
+			}
+		} else {
+			res[i] = choose(p)
+		}
 	}
 
 	return res
