@@ -71,7 +71,6 @@ func NewRNN(inputNeurons, outputNeurons int) *RNN {
 // but also on the entire history of inputs you’ve fed in in the past.
 // Written as a class, the RNN’s API consists of a single step function:
 func (r *RNN) step(x, hprev []float64) (y, h []float64) {
-	r.Lock()
 	h = tanh(
 		add(
 			dot(r.wxh, x),
@@ -81,7 +80,6 @@ func (r *RNN) step(x, hprev []float64) (y, h []float64) {
 	y = add(
 		dot(r.why, h),
 		r.by)
-	r.Unlock()
 	return
 }
 
@@ -92,9 +90,7 @@ func (r *RNN) step(x, hprev []float64) (y, h []float64) {
 func (r *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) {
 	inputSize := len(xs)
 	hp := make([]float64, len(hprev))
-	r.Lock()
 	copy(hp, hprev)
-	r.Unlock()
 	// un-normalized log probabilities for next chars
 	ys = make([][]float64, inputSize)
 	hs = make([][]float64, inputSize)
@@ -178,10 +174,11 @@ func (r *RNN) Train() (feed chan TrainingSet, info chan float64) {
 			copy(xs, tset.Inputs)
 			ts := make([][]float64, len(tset.Targets))
 			copy(ts, tset.Targets)
+			r.Lock()
 			ys, hs := r.forwardPass(xs, r.hprev)
 			// Save the last state for future training
-			r.Lock()
-			r.hprev = hs[len(hs)-1]
+			copy(r.hprev, hs[len(hs)-1])
+			//r.hprev = hs[len(hs)-1]
 			r.Unlock()
 			ps := normalizeByRow(ys)
 			// Loss evaluation
@@ -239,16 +236,18 @@ func (r *RNN) Sample(seed, n int, choose func([]float64) int) []int {
 	res := make([]int, n)
 	h := make([]float64, len(r.hprev))
 	//copy(h, r.hprev)
-	x := make([]float64, r.config.inputNeurons)
 	y := make([]float64, r.config.outputNeurons)
 	for i := 0; i < n; i++ {
+		x := make([]float64, r.config.inputNeurons)
 		if i == 0 {
 			x[seed] = 1
 		} else {
 			x[res[i-1]] = 1
 		}
 
-		y, h = r.step(x, h)
+		yr, hr := r.step(x, h)
+		copy(y, yr)
+		copy(h, hr)
 		expY := exp(y)
 		p := div(expY, sum(expY))
 		res[i] = choose(p)
