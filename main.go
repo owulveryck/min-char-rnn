@@ -35,7 +35,7 @@ func main() {
 	input := flag.String("input", "data/input.txt", "the input text to train the network")
 	start := flag.String("sampleStart", "Hello,", "the input text to train the network")
 	train := flag.Bool("train", false, "Training a rnn")
-	backup := flag.String("backup", "backup.bin", "backup file")
+	backup := flag.String("backup", "", "backup file")
 	restore := flag.String("restore", "", "backup file to restore")
 	num := flag.Int("sampleSize", 500, "size of the sample to generate")
 	endRegexp := flag.String("sampleEndRegexp", "", "If ca generated char match the regexp, it stops")
