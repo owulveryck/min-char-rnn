@@ -48,15 +48,13 @@ func (rnn *RNN) GobDecode(b []byte) error {
 	}
 	var backup bkp
 	err := dec.Decode(&backup)
-	/*
-		r, _ := backup.Wxh.Dims()
-		_, c := backup.Why.Dims()
-		rnn = NewRNN(r, c)
-	*/
+	rnn.bh = make([]float64, len(backup.Bh))
+	rnn.by = make([]float64, len(backup.By))
+	rnn.hprev = make([]float64, len(backup.Hprev))
 	if err == nil {
-		rnn.whh = backup.Whh
-		rnn.why = backup.Why
-		rnn.wxh = backup.Wxh
+		*rnn.whh = *backup.Whh
+		*rnn.why = *backup.Why
+		*rnn.wxh = *backup.Wxh
 		rnn.config = backup.Config
 		copy(rnn.bh, backup.Bh)
 		copy(rnn.by, backup.By)
