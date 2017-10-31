@@ -205,7 +205,7 @@ func (s *sample) sampling(neuralNet *rnn.RNN) {
 	var index []int
 	index = neuralNet.Sample(s.sampleStart, s.numChars, s.distribution)
 
-	fmt.Printf("\n------------\n")
+	fmt.Printf("\n------%v------\n", time.Now())
 	for _, idx := range index {
 		str := fmt.Sprintf("%c", s.ixToRune[idx])
 		fmt.Printf("%v", str)

@@ -1,0 +1,29 @@
+This application is configured via the environment. The following environment
+variables can be used:
+
+KEY                   TYPE       DEFAULT    REQUIRED    DESCRIPTION
+RNN_HIDDENNEURONS     Integer    100        true        
+RNN_LEARNINGRATE      Float      1e-1       true        
+RNN_ADAGRADEPSILON    Float      1e-8       true        
+RNN_RANDOMFACTOR      Float      0.01                   
+This application is configured via the environment. The following environment
+variables can be used:
+
+KEY                         TYPE       DEFAULT    REQUIRED    DESCRIPTION
+MIN_CHAR_CHOICE             String     soft       true        
+MIN_CHAR_EPOCHS             Integer    100        true        
+MIN_CHAR_BATCHSIZE          Integer    20         true        
+MIN_CHAR_SAMPLESIZE         Integer    100        true        
+MIN_CHAR_SAMPLEFREQUENCY    Integer    1000       true        
+
+------2017-10-31 11:01:22.326755528 +0100 CET m=+0.354655718------
+Bonjour, .
+------------
+
+------2017-10-31 11:01:27.40517695 +0100 CET m=+5.432974140------
+Bonjour, e e e e e e e e e e e pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas pas phhhhhhhhh
+------------
+
+------2017-10-31 11:01:32.497057603 +0100 CET m=+10.524716793------
+Bonjour, les pas pas pas pas pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous pans cous phhhhhhhhh
+------------
