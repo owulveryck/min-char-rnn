@@ -21,6 +21,8 @@ var conf configuration
 
 func usage(err error) error {
 	flag.Usage()
+	// To display help
+	rnn.NewRNN(0, 0)
 	err = envconfig.Usage("MIN_CHAR", &conf)
 	if err != nil {
 		log.Fatal(err)
@@ -42,11 +44,7 @@ func main() {
 	if *help {
 		log.Fatal(usage(nil))
 	}
-	err := envconfig.Usage("MIN_CHAR", &conf)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = envconfig.Process("MIN_CHAR", &conf)
+	err := envconfig.Process("MIN_CHAR", &conf)
 	if err != nil {
 		log.Fatal(usage(err))
 	}
@@ -54,7 +52,7 @@ func main() {
 	case true:
 		training(vocab, input, start, endRegexp, restore, backup, num)
 	case false:
-		var neuralNet *rnn.RNN
+		neuralNet := rnn.NewRNN(1, 1)
 		if *restore == "" {
 			log.Fatal("please specify the rnn backup to use")
 		}

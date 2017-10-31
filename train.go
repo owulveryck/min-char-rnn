@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"math"
 	"os"
+	"time"
 
 	"github.com/owulveryck/min-char-rnn/rnn"
 )
@@ -97,7 +99,9 @@ func training(vocab, input, start, endRegexp, restore, backup *string, num *int)
 			log.Printf("Epoch %v, iteration: %v, loss: %v", epoch, n, smoothLoss)
 		}
 		if n%conf.SampleFrequency == 0 {
+			fmt.Printf("\n------%v------\n", time.Now())
 			sample.sampling(neuralNet)
+			fmt.Printf("\n------------\n")
 			if *backup != "" {
 				b, err := neuralNet.GobEncode()
 				if err != nil {

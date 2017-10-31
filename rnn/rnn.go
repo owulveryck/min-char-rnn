@@ -48,17 +48,20 @@ func (rnn *RNN) GobDecode(b []byte) error {
 	}
 	var backup bkp
 	err := dec.Decode(&backup)
+	/*
+		r, _ := backup.Wxh.Dims()
+		_, c := backup.Why.Dims()
+		rnn = NewRNN(r, c)
+	*/
 	if err == nil {
 		rnn.whh = backup.Whh
 		rnn.why = backup.Why
 		rnn.wxh = backup.Wxh
 		rnn.config = backup.Config
-		rnn.bh = backup.Bh
-		rnn.by = backup.By
-		rnn.hprev = backup.Hprev
-		// write the config
+		copy(rnn.bh, backup.Bh)
+		copy(rnn.by, backup.By)
+		copy(rnn.hprev, backup.Hprev)
 	}
-
 	return err
 }
 
@@ -98,11 +101,14 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 //func newRNN(x, y, h int) *RNN {
 func NewRNN(inputNeurons, outputNeurons int) *RNN {
 	var conf neuralNetConfig
-	err := envconfig.Usage("RNN", &conf)
-	if err != nil {
-		log.Fatal(err)
+	if inputNeurons == 0 || outputNeurons == 0 {
+		err := envconfig.Usage("RNN", &conf)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return nil
 	}
-	err = envconfig.Process("RNN", &conf)
+	err := envconfig.Process("RNN", &conf)
 	if err != nil {
 		log.Fatal(err)
 	}
