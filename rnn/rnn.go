@@ -309,6 +309,41 @@ func (rnn *RNN) Train() (feed chan TrainingSet, info chan float64) {
 	return feed, info
 }
 
+// Predict n element of  output that corresponds to the input xs
+// At every iteration, the output is processed by the adapt function
+func (rnn *RNN) Predict(xs [][]float64, n int, adapt func([]float64) []float64) [][]float64 {
+	ys := make([][]float64, n+len(xs))
+	h := make([]float64, len(rnn.hprev))
+	y := make([]float64, rnn.config.OutputNeurons)
+	for i := 0; i < n+len(xs); i++ {
+		x := make([]float64, rnn.config.InputNeurons)
+		if i < len(xs) {
+			copy(x, xs[i])
+		} else {
+			copy(x, ys[i-1])
+		}
+
+		yr, hr := rnn.step(x, h)
+		copy(y, yr)
+		copy(h, hr)
+		expY := exp(y)
+		p := div(expY, sum(expY))
+		ys[i] = p
+		if i < len(xs) {
+			for j := 0; j < len(xs[i]); j++ {
+				if xs[i][j] == float64(1) {
+					ys[i][j] = float64(1)
+				}
+			}
+		} else {
+			ys[i] = adapt(p)
+		}
+	}
+	res := make([][]float64, n)
+	copy(res, ys[len(xs):])
+	return res
+}
+
 // Sample the rnn
 func (rnn *RNN) Sample(xs [][]float64, n int, choose func([]float64) int) []int {
 	res := make([]int, n+len(xs))

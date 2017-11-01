@@ -2,21 +2,17 @@ package main
 
 import (
 	"bytes"
-	"encoding/gob"
+	"errors"
 	"flag"
+	"io"
 	"io/ioutil"
 	"log"
+	"os"
 
 	"github.com/kelseyhightower/envconfig"
+	"github.com/owulveryck/min-char-rnn/codec"
 	"github.com/owulveryck/min-char-rnn/rnn"
 )
-
-// Learner ...
-type Learner interface {
-	SetInputVectorSize(int)
-	SetOutputVectorSize(int)
-	Decode([]float64)
-}
 
 type configuration struct {
 	Choice          string `default:"soft" required:"true"`
@@ -27,6 +23,11 @@ type configuration struct {
 }
 
 var conf configuration
+
+var (
+	restoreFile *string
+	backupFile  *string
+)
 
 func usage(err error) error {
 	flag.Usage()
@@ -40,14 +41,14 @@ func usage(err error) error {
 }
 
 func main() {
-	vocab := flag.String("vocab", "data/vocab.txt", "the file holds the vocabulary")
-	input := flag.String("input", "data/input.txt", "the input text to train the network")
+	//vocab := flag.String("vocab", "data/vocab.txt", "the file holds the vocabulary")
+	//input := flag.String("input", "data/input.txt", "the input text to train the network")
 	start := flag.String("sampleStart", "Hello,", "the input text to train the network")
 	train := flag.Bool("train", false, "Training a rnn")
-	backup := flag.String("backup", "", "backup file")
-	restore := flag.String("restore", "", "backup file to restore")
+	backupFile = flag.String("backup", "", "backup file")
+	restoreFile = flag.String("restore", "", "backup file to restoreFile")
 	num := flag.Int("sampleSize", 500, "size of the sample to generate")
-	endRegexp := flag.String("sampleEndRegexp", "", "If ca generated char match the regexp, it stops")
+	//endRegexp := flag.String("sampleEndRegexp", "", "If ca generated char match the regexp, it stops")
 	help := flag.Bool("h", false, "display help")
 	flag.Parse()
 	if *help {
@@ -59,35 +60,57 @@ func main() {
 	}
 	switch *train {
 	case true:
-		training(vocab, input, start, endRegexp, restore, backup, num)
+		//training(vocab, input, start, endRegexp, restoreFile, backup, num)
+		var cdc codec.Codec
+		var rnn *rnn.RNN
+		cdc, rnn, err = restore()
+		if err != nil {
+			log.Println("Cannot restore from backup, creating new entries", err)
+			rnn = cdc.NewRNN()
+		}
+		feed, info := rnn.Train()
+		feeder := cdc.Feed()
+		for tset := range feeder {
+			feed <- tset
+			loss := <-info
+			cdc.SetLoss(loss)
+			cdc.GetInfos()
+		}
+		err = backup(cdc, rnn)
+		if err != nil {
+			log.Println("Cannot backup ", err)
+		}
 	case false:
-		neuralNet := rnn.NewRNN(1, 1)
-		if *restore == "" {
-			log.Fatal("please specify the rnn backup to use")
-		}
-		b, err := ioutil.ReadFile(*restore)
+		cdc, rnn, err := restore()
 		if err != nil {
-			log.Fatal("Cannot read backup file", err)
+			log.Fatal("Unable to restore", err)
 		}
-		bkp := bkpStruct{}
-		backupBytes := bytes.NewBuffer(b)
-		dec := gob.NewDecoder(backupBytes) // Will read from network.getVocabIndexesFromFile(
-		err = dec.Decode(&bkp)
-		if err != nil {
-			log.Fatal("Cannot decode backup", err)
-		}
-		err = neuralNet.GobDecode(bkp.RNN)
-		if err != nil {
-			log.Fatal("Cannot decode backup", err)
-		}
+		xs := cdc.Encode(bytes.NewBufferString(*start))
 
-		sample := newSample(bkp.IxToRunes, bkp.RunesToIx, *start, *endRegexp, conf.Choice, *num)
-		sample.sampling(neuralNet)
+		ys := rnn.Predict(xs, *num, cdc.Choose)
+		io.Copy(os.Stdout, cdc.Decode(ys))
 	}
 }
-
-type bkpStruct struct {
-	RNN       []byte
-	IxToRunes map[int]rune
-	RunesToIx map[rune]int
+func restore() (codec.Codec, *rnn.RNN, error) {
+	if restoreFile == nil {
+		return nil, nil, errors.New("No restore file specified")
+	}
+	b, err := ioutil.ReadFile(*restoreFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return codec.Restore(b)
+}
+func backup(cdc codec.Codec, rnn *rnn.RNN) error {
+	if *backupFile != "" {
+		b, err := codec.Save(cdc, rnn)
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(*backupFile, b, 0644)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
