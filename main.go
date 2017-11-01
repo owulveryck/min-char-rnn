@@ -11,6 +11,13 @@ import (
 	"github.com/owulveryck/min-char-rnn/rnn"
 )
 
+// Learner ...
+type Learner interface {
+	SetInputVectorSize(int)
+	SetOutputVectorSize(int)
+	Decode([]float64)
+}
+
 type configuration struct {
 	Choice          string `default:"soft" required:"true"`
 	Epochs          int    `default:"100" required:"true"`

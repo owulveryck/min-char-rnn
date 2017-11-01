@@ -9,19 +9,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gonum/matrix/mat64"
 	"github.com/kelseyhightower/envconfig"
-	"gonum.org/v1/gonum/mat"
 )
 
 // RNN represents the neural network
-// This RNNs parameters are the three matrices whh, wxh, why.
+// This RNNs parameters are the three mat64rices whh, wxh, why.
 // hprev is the last known hidden vector, which is actually the memory of the RNN
 // bh, and by are the biais vectors respectivly for the hidden layer and the output layer
 type RNN struct {
 	sync.Mutex
-	whh *mat.Dense // size is hiddenDimension * hiddenDimension
-	wxh *mat.Dense //
-	why *mat.Dense //
+	whh *mat64.Dense // size is hiddenDimension * hiddenDimension
+	wxh *mat64.Dense //
+	why *mat64.Dense //
 	// This is the last known hidden vector that represents the memory of the RNN
 	// This is used only for training
 	hprev  []float64
@@ -36,9 +36,9 @@ func (rnn *RNN) GobDecode(b []byte) error {
 	dec := gob.NewDecoder(input) // Will read from network.
 
 	type bkp struct {
-		Whh *mat.Dense // size is hiddenDimension * hiddenDimension
-		Wxh *mat.Dense //
-		Why *mat.Dense //
+		Whh *mat64.Dense // size is hiddenDimension * hiddenDimension
+		Wxh *mat64.Dense //
+		Why *mat64.Dense //
 		// This is the last known hidden vector that represents the memory of the RNN
 		// This is used only for training
 		Hprev  []float64
@@ -70,9 +70,9 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 	enc := gob.NewEncoder(&output) // Will write to network.
 
 	type bkp struct {
-		Whh *mat.Dense // size is hiddenDimension * hiddenDimension
-		Wxh *mat.Dense //
-		Why *mat.Dense //
+		Whh *mat64.Dense // size is hiddenDimension * hiddenDimension
+		Wxh *mat64.Dense //
+		Why *mat64.Dense //
 		// This is the last known hidden vector that represents the memory of the RNN
 		// This is used only for training
 		Hprev  []float64
@@ -118,9 +118,9 @@ func NewRNN(inputNeurons, outputNeurons int) *RNN {
 	rnn.config = conf
 	// Initialize biases/weights.
 
-	rnn.wxh = mat.NewDense(conf.HiddenNeurons, conf.InputNeurons, nil)
-	rnn.whh = mat.NewDense(conf.HiddenNeurons, conf.HiddenNeurons, nil)
-	rnn.why = mat.NewDense(conf.OutputNeurons, conf.HiddenNeurons, nil)
+	rnn.wxh = mat64.NewDense(conf.HiddenNeurons, conf.InputNeurons, nil)
+	rnn.whh = mat64.NewDense(conf.HiddenNeurons, conf.HiddenNeurons, nil)
+	rnn.why = mat64.NewDense(conf.OutputNeurons, conf.HiddenNeurons, nil)
 	rnn.bh = make([]float64, conf.HiddenNeurons)
 	rnn.by = make([]float64, conf.OutputNeurons)
 	wHiddenRaw := rnn.wxh.RawMatrix().Data
@@ -164,9 +164,9 @@ func (rnn *RNN) step(x, hprev []float64) (y, h []float64) {
 	return
 }
 
-// forwardPass takes a matrix of inputs and returns
-// the corresponding outputs matrix
-// and a matrix of the hidden states that will be used
+// forwardPass takes a mat64rix of inputs and returns
+// the corresponding outputs mat64rix
+// and a mat64rix of the hidden states that will be used
 // for the backpropagation
 func (rnn *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) {
 	inputSize := len(xs)
@@ -186,15 +186,15 @@ func (rnn *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64
 }
 
 // Do a backpropagation of the RNNs and returns the derivates
-// xs is the input matrix
-// ts is the target matrices
+// xs is the input mat64rix
+// ts is the target mat64rices
 // ps is the normalized log probability
-// hs is a matrix of hidden vector
-func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *mat.Dense, dbh, dby []float64) {
+// hs is a mat64rix of hidden vector
+func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *mat64.Dense, dbh, dby []float64) {
 	inputSize := len(xs)
-	dwxh = mat.NewDense(rnn.config.HiddenNeurons, rnn.config.InputNeurons, nil)
-	dwhh = mat.NewDense(rnn.config.HiddenNeurons, rnn.config.HiddenNeurons, nil)
-	dwhy = mat.NewDense(rnn.config.OutputNeurons, rnn.config.HiddenNeurons, nil)
+	dwxh = mat64.NewDense(rnn.config.HiddenNeurons, rnn.config.InputNeurons, nil)
+	dwhh = mat64.NewDense(rnn.config.HiddenNeurons, rnn.config.HiddenNeurons, nil)
+	dwhy = mat64.NewDense(rnn.config.OutputNeurons, rnn.config.HiddenNeurons, nil)
 	dhnext := make([]float64, rnn.config.OutputNeurons)
 	dbh = make([]float64, rnn.config.HiddenNeurons)
 	dby = make([]float64, rnn.config.OutputNeurons)
@@ -232,7 +232,7 @@ func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *m
 	return
 }
 
-// TrainingSet represents an input matrix and the expected
+// TrainingSet represents an input mat64rix and the expected
 // result when passed through a rnn
 type TrainingSet struct {
 	Inputs  [][]float64

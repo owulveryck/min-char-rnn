@@ -3,7 +3,7 @@ package rnn
 import (
 	"math"
 
-	"gonum.org/v1/gonum/mat"
+	"github.com/gonum/matrix/mat64"
 )
 
 func tanh(a []float64) []float64 {
@@ -14,18 +14,18 @@ func tanh(a []float64) []float64 {
 	return ret
 }
 
-func dotVec(a, b []float64) *mat.Dense {
-	va := mat.NewDense(len(a), 1, a)
-	vb := mat.NewDense(1, len(b), b)
-	ret := new(mat.Dense)
+func dotVec(a, b []float64) *mat64.Dense {
+	va := mat64.NewDense(len(a), 1, a)
+	vb := mat64.NewDense(1, len(b), b)
+	ret := new(mat64.Dense)
 	ret.Mul(va, vb)
 	return ret
 }
-func dot(a mat.Matrix, b []float64) []float64 {
-	t := mat.NewDense(len(b), 1, b)
+func dot(a mat64.Matrix, b []float64) []float64 {
+	t := mat64.NewDense(len(b), 1, b)
 	row, _ := a.Dims()
 	backend := make([]float64, row)
-	r := mat.NewDense(row, 1, backend)
+	r := mat64.NewDense(row, 1, backend)
 	r.Mul(a, t)
 	return backend
 }
