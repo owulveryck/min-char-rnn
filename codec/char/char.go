@@ -3,6 +3,7 @@ package char
 import (
 	"bufio"
 	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,15 +19,19 @@ import (
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
-type configuration struct {
+type trainingConfiguration struct {
 	Epoch     int    `default:"100" required:"true"`
 	Input     string `envconfig:"input_file" default:"" required:"true"`
 	VocabFile string `envconfig:"vocab_file" default:"" required:"true"`
 	BatchSize int    `envconfig:"BATCH_SIZE" default:"25" required:"true"`
-	Choice    string `default:"hard" required:"true"`
+	Choice    string `ignored:"true"` // Ignored because parsed in the other structure
 }
 
-var conf configuration
+type predictConfiguration struct {
+	Choice string `default:"hard" required:"true"`
+}
+
+var conf trainingConfiguration
 
 const envPrefix = "CHAR_CODEC"
 
@@ -37,6 +42,12 @@ func Configure() error {
 	if err != nil {
 		return err
 	}
+	var s predictConfiguration
+	err = envconfig.Process(envPrefix, &s)
+	if err != nil {
+		return err
+	}
+	conf.Choice = s.Choice
 	if conf.BatchSize == 0 {
 		return errors.New("BATCH_SIZE cannot be null")
 	}
@@ -231,10 +242,51 @@ func (c *Char) GetInfos() json.Marshaler {
 
 // GobEncode ...
 func (c *Char) GobEncode() ([]byte, error) {
-	return nil, nil
+	var output bytes.Buffer // Stand-in for a network connection
+
+	enc := gob.NewEncoder(&output) // Will write to network.
+	type tmp struct {
+		Loss       float64
+		SmoothLoss float64
+		RunesToIx  map[rune]int
+		IxToRunes  map[int]rune
+		BatchSize  int
+	}
+	var t tmp
+	t.Loss = c.loss
+	t.SmoothLoss = c.smoothLoss
+	t.RunesToIx = c.runesToIx
+	t.IxToRunes = c.ixToRunes
+	t.BatchSize = conf.BatchSize
+	err := enc.Encode(t)
+
+	return output.Bytes(), err
 }
 
 // GobDecode ...
-func (c *Char) GobDecode([]byte) error {
-	return nil
+func (c *Char) GobDecode(b []byte) error {
+	var s predictConfiguration
+	err := envconfig.Process(envPrefix, &s)
+	if err != nil {
+		return err
+	}
+	conf.Choice = s.Choice
+	input := bytes.NewBuffer(b)
+	dec := gob.NewDecoder(input) // Will read from network.
+	type tmp struct {
+		Loss       float64
+		SmoothLoss float64
+		RunesToIx  map[rune]int
+		IxToRunes  map[int]rune
+		BatchSize  int
+	}
+	var t tmp
+	err = dec.Decode(&t)
+	c.loss = t.Loss
+	c.smoothLoss = t.SmoothLoss
+	c.runesToIx = t.RunesToIx
+	c.ixToRunes = t.IxToRunes
+	conf.BatchSize = t.BatchSize
+
+	return err
 }
