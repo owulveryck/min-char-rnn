@@ -347,36 +347,3 @@ func (rnn *RNN) Predict(xs [][]float64, n int, adapt func([]float64) []float64) 
 	copy(res, ys[len(xs):])
 	return res
 }
-
-// Sample the rnn
-func (rnn *RNN) Sample(xs [][]float64, n int, choose func([]float64) int) []int {
-	res := make([]int, n+len(xs))
-	h := make([]float64, len(rnn.hprev))
-	//copy(h, rnn.hprev)
-	y := make([]float64, rnn.config.OutputNeurons)
-	for i := 0; i < n; i++ {
-		x := make([]float64, rnn.config.InputNeurons)
-		if i < len(xs) {
-			copy(x, xs[i])
-		} else {
-			x[res[i-1]] = 1
-		}
-
-		yr, hr := rnn.step(x, h)
-		copy(y, yr)
-		copy(h, hr)
-		expY := exp(y)
-		p := div(expY, sum(expY))
-		if i < len(xs) {
-			for j := 0; j < len(xs[i]); j++ {
-				if xs[i][j] == float64(1) {
-					res[i] = j
-				}
-			}
-		} else {
-			res[i] = choose(p)
-		}
-	}
-
-	return res
-}
