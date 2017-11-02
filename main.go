@@ -97,7 +97,7 @@ func main() {
 				}
 			default:
 			}
-			if n%conf.BackupFrequency == 0 {
+			if conf.BackupFrequency != 0 && n%conf.BackupFrequency == 0 {
 				err = backup(cdc, nn)
 				if err != nil {
 					log.Println("Cannot backup ", err)
