@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"io"
-	"log"
 
 	"github.com/owulveryck/min-char-rnn/rnn"
 )
@@ -22,32 +21,43 @@ type Codec interface {
 	ApplyDist([]float64) []float64
 	SetLoss(float64)
 	GetInfos() json.Marshaler
+	MarshalBinary() ([]byte, error)
+	UnmarshalBinary([]byte) error
 }
 
 // Backup ...
 type backup struct {
-	Codec Codec
-	rnn   rnn.RNN
+	Cdc []byte
+	Rnn rnn.RNN
 }
 
 // Save the Codec and the RNN for future use
 func Save(c Codec, r *rnn.RNN) ([]byte, error) {
+	var cdcb []byte
+	var err error
+	cdcb, err = c.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
 	bkp := backup{
-		c,
+		cdcb,
 		*r,
 	}
 	var output bytes.Buffer
 	enc := gob.NewEncoder(&output)
-	err := enc.Encode(&bkp)
+	err = enc.Encode(&bkp)
 	return output.Bytes(), err
 }
 
 // Restore the learner and the RNN
-func Restore(b []byte) (Codec, *rnn.RNN, error) {
+func Restore(b []byte) ([]byte, *rnn.RNN, error) {
 	var bkp backup
 	input := bytes.NewBuffer(b)
 	dec := gob.NewDecoder(input)
 	err := dec.Decode(&bkp)
-	log.Println(bkp.rnn)
-	return bkp.Codec, &bkp.rnn, err
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return bkp.Cdc, &bkp.Rnn, err
 }

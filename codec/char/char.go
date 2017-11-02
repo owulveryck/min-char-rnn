@@ -65,7 +65,6 @@ type Char struct {
 	loss       float64
 	smoothLoss float64
 	batchSize  int
-	input      io.ReadSeeker
 	runesToIx  map[rune]int
 	ixToRunes  map[int]rune
 }
@@ -84,17 +83,12 @@ func NewChar() (*Char, error) {
 	if err != nil {
 		return nil, err
 	}
-	r, err := os.Open(conf.Input)
-	if err != nil {
-		return nil, err
-	}
 	return &Char{
 		loss:       0,
 		batchSize:  conf.BatchSize,
 		ixToRunes:  ixToRunes,
 		runesToIx:  runesToIx,
 		smoothLoss: -math.Log(float64(1)/float64(len(runesToIx))) * float64(conf.BatchSize),
-		input:      r,
 	}, nil
 }
 
@@ -138,7 +132,6 @@ func (c *Char) Encode(r io.Reader) [][]float64 {
 			log.Fatal(err)
 		} else {
 			oneOfK := make([]float64, len(c.runesToIx))
-			log.Println("DEBUG", len(c.runesToIx))
 			oneOfK[c.runesToIx[char]] = 1
 			xs = append(xs, oneOfK)
 		}
@@ -151,14 +144,23 @@ func (c *Char) Encode(r io.Reader) [][]float64 {
 // that is putting some data in the channel
 func (c *Char) Feed() <-chan rnn.TrainingSet {
 	feed := make(chan rnn.TrainingSet, 1)
+	err := Configure()
+	if err != nil {
+		return nil
+	}
+	rdr, err := os.Open(conf.Input)
+	if err != nil {
+		return nil
+	}
 	go func(feed chan<- rnn.TrainingSet) {
-		r := bufio.NewReader(c.input)
+		defer rdr.Close()
+		r := bufio.NewReader(rdr)
 		tset := rnn.TrainingSet{
 			Inputs:  make([][]float64, conf.BatchSize),
 			Targets: make([][]float64, conf.BatchSize),
 		}
 		for epoch := 0; epoch < conf.Epoch; epoch++ {
-			if _, err := c.input.Seek(0, io.SeekStart); err != nil {
+			if _, err := rdr.Seek(0, io.SeekStart); err != nil {
 				log.Fatal(err)
 			}
 			for {
@@ -245,47 +247,40 @@ func (c *Char) GetInfos() json.Marshaler {
 	}
 }
 
-// GobEncode ...
-func (c *Char) GobEncode() ([]byte, error) {
-	var output bytes.Buffer // Stand-in for a network connection
+type backupStruct struct {
+	Loss       float64
+	SmoothLoss float64
+	RunesToIx  map[rune]int
+	IxToRunes  map[int]rune
+	BatchSize  int
+}
 
-	enc := gob.NewEncoder(&output) // Will write to network.
-	type tmp struct {
-		Loss       float64
-		SmoothLoss float64
-		RunesToIx  map[rune]int
-		IxToRunes  map[int]rune
-		BatchSize  int
-	}
-	var t tmp
+//MarshalBinary ...
+func (c *Char) MarshalBinary() ([]byte, error) {
+	buf := new(bytes.Buffer) // Stand-in for a network connection
+	var t backupStruct
 	t.Loss = c.loss
 	t.SmoothLoss = c.smoothLoss
 	t.RunesToIx = c.runesToIx
 	t.IxToRunes = c.ixToRunes
 	t.BatchSize = conf.BatchSize
+	enc := gob.NewEncoder(buf)
 	err := enc.Encode(t)
 
-	return output.Bytes(), err
+	return buf.Bytes(), err
 }
 
-// GobDecode ...
-func (c *Char) GobDecode(b []byte) error {
+// UnmarshalBinary ...
+func (c *Char) UnmarshalBinary(b []byte) error {
 	var s predictConfiguration
 	err := envconfig.Process(envPrefix, &s)
 	if err != nil {
 		return err
 	}
 	conf.Choice = s.Choice
-	input := bytes.NewBuffer(b)
-	dec := gob.NewDecoder(input) // Will read from network.
-	type tmp struct {
-		Loss       float64
-		SmoothLoss float64
-		RunesToIx  map[rune]int
-		IxToRunes  map[int]rune
-		BatchSize  int
-	}
-	var t tmp
+	buf := bytes.NewBuffer(b)
+	var t backupStruct
+	dec := gob.NewDecoder(buf)
 	err = dec.Decode(&t)
 	c.loss = t.Loss
 	c.smoothLoss = t.SmoothLoss

@@ -136,7 +136,10 @@ func restore() (codec.Codec, *rnn.RNN, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return codec.Restore(b)
+	cdcb, nn, err := codec.Restore(b)
+	cdc := &char.Char{}
+	cdc.UnmarshalBinary(cdcb)
+	return cdc, nn, err
 }
 func backup(cdc codec.Codec, rnn *rnn.RNN) error {
 	if conf.BackupPrefix != "" {

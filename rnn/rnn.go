@@ -30,31 +30,32 @@ type RNN struct {
 	config neuralNetConfig
 }
 
+type bkp struct {
+	Whh *mat64.Dense // size is hiddenDimension * hiddenDimension
+	Wxh *mat64.Dense //
+	Why *mat64.Dense //
+	// This is the last known hidden vector that represents the memory of the RNN
+	// This is used only for training
+	Hprev  []float64
+	Bh     []float64 // This is the biais
+	By     []float64 // This is the biais
+	Config neuralNetConfig
+}
+
 // GobDecode the rnn for restoring
 func (rnn *RNN) GobDecode(b []byte) error {
 	input := bytes.NewBuffer(b)
 	dec := gob.NewDecoder(input) // Will read from network.
 
-	type bkp struct {
-		Whh *mat64.Dense // size is hiddenDimension * hiddenDimension
-		Wxh *mat64.Dense //
-		Why *mat64.Dense //
-		// This is the last known hidden vector that represents the memory of the RNN
-		// This is used only for training
-		Hprev  []float64
-		Bh     []float64 // This is the biais
-		By     []float64 // This is the biais
-		Config neuralNetConfig
-	}
 	var backup bkp
 	err := dec.Decode(&backup)
 	rnn.bh = make([]float64, len(backup.Bh))
 	rnn.by = make([]float64, len(backup.By))
 	rnn.hprev = make([]float64, len(backup.Hprev))
 	if err == nil {
-		*rnn.whh = *backup.Whh
-		*rnn.why = *backup.Why
-		*rnn.wxh = *backup.Wxh
+		rnn.whh = backup.Whh
+		rnn.why = backup.Why
+		rnn.wxh = backup.Wxh
 		rnn.config = backup.Config
 		copy(rnn.bh, backup.Bh)
 		copy(rnn.by, backup.By)
@@ -68,18 +69,6 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 	var output bytes.Buffer // Stand-in for a network connection
 
 	enc := gob.NewEncoder(&output) // Will write to network.
-
-	type bkp struct {
-		Whh *mat64.Dense // size is hiddenDimension * hiddenDimension
-		Wxh *mat64.Dense //
-		Why *mat64.Dense //
-		// This is the last known hidden vector that represents the memory of the RNN
-		// This is used only for training
-		Hprev  []float64
-		Bh     []float64 // This is the biais
-		By     []float64 // This is the biais
-		Config neuralNetConfig
-	}
 	rnn.Lock()
 	err := enc.Encode(bkp{
 		rnn.whh,
@@ -170,8 +159,6 @@ func (rnn *RNN) step(x, hprev []float64) (y, h []float64) {
 // for the backpropagation
 func (rnn *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) {
 	inputSize := len(xs)
-	hp := make([]float64, len(hprev))
-	copy(hp, hprev)
 	// un-normalized log probabilities for next chars
 	ys = make([][]float64, inputSize)
 	hs = make([][]float64, inputSize)
@@ -179,8 +166,8 @@ func (rnn *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64
 		// Initialization of the arrays
 		ys[t] = make([]float64, rnn.config.OutputNeurons)
 		hs[t] = make([]float64, rnn.config.HiddenNeurons)
-		ys[t], hs[t] = rnn.step(xs[t], hp)
-		hp = hs[t]
+		ys[t], hs[t] = rnn.step(xs[t], hprev)
+		hprev = hs[t]
 	}
 	return
 }
@@ -210,10 +197,12 @@ func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *m
 		)
 		dby = add(dby, dy)
 
+		rnn.Lock()
 		dh := add(
 			dot(rnn.why.T(), dy),
 			dhnext,
 		)
+		rnn.Unlock()
 
 		for i := range hs[t] {
 			dhraw[i] = (1 - hs[t][i]*hs[t][i]) * dh[i]
@@ -226,7 +215,9 @@ func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *m
 		} else {
 			dwhh.Add(dwhh, dotVec(dhraw, hs[t-1]))
 		}
+		rnn.Lock()
 		dhnext = dot(rnn.whh.T(), dhraw)
+		rnn.Unlock()
 	}
 
 	return
@@ -266,9 +257,13 @@ func (rnn *RNN) Train() (feed chan TrainingSet, info chan float64) {
 			// Forward pass
 			xs := tset.Inputs
 			ts := tset.Targets
+			hp := make([]float64, len(rnn.hprev))
 			rnn.Lock()
-			ys, hs := rnn.forwardPass(xs, rnn.hprev)
+			copy(hp, rnn.hprev)
+			rnn.Unlock()
+			ys, hs := rnn.forwardPass(xs, hp)
 			// Save the last state for future training
+			rnn.Lock()
 			copy(rnn.hprev, hs[len(hs)-1])
 			//rnn.hprev = hs[len(hs)-1]
 			rnn.Unlock()
@@ -289,9 +284,7 @@ func (rnn *RNN) Train() (feed chan TrainingSet, info chan float64) {
 			}
 
 			// Backpass
-			rnn.Lock()
 			dwxh, dwhh, dwhy, dbh, dby := rnn.backPropagation(xs, ps, hs, ts)
-			rnn.Unlock()
 			// Clip to mitigate exploding gradients
 			for _, param := range [][]float64{
 				dwxh.RawMatrix().Data,
