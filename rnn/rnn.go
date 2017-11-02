@@ -245,12 +245,12 @@ func CopyOf(tset TrainingSet) TrainingSet {
 // Train the network.
 // The train mechanisme is launched in a seperate go-routine
 // it is waiting for an input to be sent in the feeding channel
-func (rnn *RNN) Train() (chan<- TrainingSet, chan float64) {
+func (rnn *RNN) Train() (chan<- TrainingSet, <-chan float64) {
 	feed := make(chan TrainingSet, 1)
 	info := make(chan float64, 1)
 
 	adagrad := newAdagrad(rnn.config)
-	go func(feed <-chan TrainingSet, info chan float64) {
+	go func(feed <-chan TrainingSet, info chan<- float64) {
 		// When we have new data
 		//for tset := range feed {
 		for tset := range feed {
