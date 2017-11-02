@@ -239,6 +239,18 @@ type TrainingSet struct {
 	Targets [][]float64
 }
 
+// CopyOf the trainingset passed as parameter
+func CopyOf(tset TrainingSet) TrainingSet {
+	xs := make([][]float64, len(tset.Inputs))
+	copy(xs, tset.Inputs)
+	ts := make([][]float64, len(tset.Targets))
+	copy(ts, tset.Targets)
+	return TrainingSet{
+		xs,
+		ts,
+	}
+}
+
 // Train the network.
 // The train mechanisme is launched in a seperate go-routine
 // it is waiting for an input to be sent in the feeding channel
