@@ -295,11 +295,11 @@ func (rnn *RNN) Train() (feed chan TrainingSet, info chan float64) {
 			} {
 				func(param []float64) {
 					for i := range param {
-						if param[i] > 5 {
-							param[i] = 5
+						if param[i] > 1 {
+							param[i] = 1
 						}
-						if param[i] < -5 {
-							param[i] = -5
+						if param[i] < -1 {
+							param[i] = -1
 						}
 					}
 				}(param)
