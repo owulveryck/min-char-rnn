@@ -48,7 +48,6 @@ func main() {
 	//vocab := flag.String("vocab", "data/vocab.txt", "the file holds the vocabulary")
 	//input := flag.String("input", "data/input.txt", "the input text to train the network")
 	train := flag.Bool("train", false, "Training a rnn")
-	backupFile = flag.String("backup", "", "backup file")
 	restoreFile = flag.String("restore", "", "backup file to restoreFile")
 	//endRegexp := flag.String("sampleEndRegexp", "", "If ca generated char match the regexp, it stops")
 	help := flag.Bool("h", false, "display help")
