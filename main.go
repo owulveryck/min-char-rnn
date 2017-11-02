@@ -119,9 +119,10 @@ func main() {
 	case false:
 		cdc, nn, err := restore()
 		if err != nil {
-			log.Fatal("Unable to restore", err)
+			log.Fatal("Unable to restore ", err)
 		}
 		xs := cdc.Encode(os.Stdin)
+		log.Println(len(xs))
 
 		ys := nn.Predict(xs, conf.SampleSize, cdc.ApplyDist)
 		io.Copy(os.Stdout, cdc.Decode(ys))

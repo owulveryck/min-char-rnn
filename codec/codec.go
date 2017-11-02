@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"io"
+	"log"
 
 	"github.com/owulveryck/min-char-rnn/rnn"
 )
@@ -21,20 +22,19 @@ type Codec interface {
 	ApplyDist([]float64) []float64
 	SetLoss(float64)
 	GetInfos() json.Marshaler
-	gob.GobDecoder
-	gob.GobEncoder
 }
 
+// Backup ...
 type backup struct {
-	CDC Codec
-	RNN *rnn.RNN
+	Codec Codec
+	rnn   rnn.RNN
 }
 
 // Save the Codec and the RNN for future use
 func Save(c Codec, r *rnn.RNN) ([]byte, error) {
 	bkp := backup{
 		c,
-		r,
+		*r,
 	}
 	var output bytes.Buffer
 	enc := gob.NewEncoder(&output)
@@ -48,5 +48,6 @@ func Restore(b []byte) (Codec, *rnn.RNN, error) {
 	input := bytes.NewBuffer(b)
 	dec := gob.NewDecoder(input)
 	err := dec.Decode(&bkp)
-	return bkp.CDC, bkp.RNN, err
+	log.Println(bkp.rnn)
+	return bkp.Codec, &bkp.rnn, err
 }

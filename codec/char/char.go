@@ -70,6 +70,10 @@ type Char struct {
 	ixToRunes  map[int]rune
 }
 
+func init() {
+	gob.Register(&Char{})
+}
+
 // NewChar ...
 func NewChar() (*Char, error) {
 	err := Configure()
@@ -134,6 +138,7 @@ func (c *Char) Encode(r io.Reader) [][]float64 {
 			log.Fatal(err)
 		} else {
 			oneOfK := make([]float64, len(c.runesToIx))
+			log.Println("DEBUG", len(c.runesToIx))
 			oneOfK[c.runesToIx[char]] = 1
 			xs = append(xs, oneOfK)
 		}
