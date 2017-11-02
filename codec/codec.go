@@ -11,13 +11,14 @@ import (
 
 // Codec ...
 type Codec interface {
+	// Decode an array of inputs and returns an io.Reader
 	Decode([][]float64) io.Reader
 	Encode(io.Reader) [][]float64
-	Feed() chan rnn.TrainingSet
+	Feed() <-chan rnn.TrainingSet
+	// NewRNN returns a neural network suitable for the codec
 	NewRNN() *rnn.RNN
-	// Choose function is applied in the prediction mechanism
-	// it is used to choose the correct category.
-	Choose([]float64) []float64
+	// ApplyDist applies  a distribution according to the configuration of the neural network
+	ApplyDist([]float64) []float64
 	SetLoss(float64)
 	GetInfos() json.Marshaler
 	gob.GobDecoder

@@ -261,12 +261,11 @@ func (rnn *RNN) Train() (feed chan TrainingSet, info chan float64) {
 	adagrad := newAdagrad(rnn.config)
 	go func(feed chan TrainingSet, info chan float64) {
 		// When we have new data
+		//for tset := range feed {
 		for tset := range feed {
 			// Forward pass
-			xs := make([][]float64, len(tset.Inputs))
-			copy(xs, tset.Inputs)
-			ts := make([][]float64, len(tset.Targets))
-			copy(ts, tset.Targets)
+			xs := tset.Inputs
+			ts := tset.Targets
 			rnn.Lock()
 			ys, hs := rnn.forwardPass(xs, rnn.hprev)
 			// Save the last state for future training
