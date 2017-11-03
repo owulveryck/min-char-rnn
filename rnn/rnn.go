@@ -6,7 +6,6 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"sync"
 	"time"
 
 	"github.com/gonum/matrix/mat64"
@@ -18,7 +17,6 @@ import (
 // hprev is the last known hidden vector, which is actually the memory of the RNN
 // bh, and by are the biais vectors respectivly for the hidden layer and the output layer
 type RNN struct {
-	sync.Mutex
 	whh *mat64.Dense // size is hiddenDimension * hiddenDimension
 	wxh *mat64.Dense //
 	why *mat64.Dense //
@@ -69,7 +67,6 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 	var output bytes.Buffer // Stand-in for a network connection
 
 	enc := gob.NewEncoder(&output) // Will write to network.
-	rnn.Lock()
 	err := enc.Encode(bkp{
 		rnn.whh,
 		rnn.wxh,
@@ -79,7 +76,6 @@ func (rnn *RNN) GobEncode() ([]byte, error) {
 		rnn.by,
 		rnn.config,
 	})
-	rnn.Unlock()
 	return output.Bytes(), err
 }
 
@@ -153,9 +149,9 @@ func (rnn *RNN) step(x, hprev []float64) (y, h []float64) {
 	return
 }
 
-// forwardPass takes a mat64rix of inputs and returns
-// the corresponding outputs mat64rix
-// and a mat64rix of the hidden states that will be used
+// forwardPass takes a matrix of inputs and returns
+// the corresponding outputs matrix
+// and a matrix of the hidden states that will be used
 // for the backpropagation
 func (rnn *RNN) forwardPass(xs [][]float64, hprev []float64) (ys, hs [][]float64) {
 	inputSize := len(xs)
@@ -197,12 +193,10 @@ func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *m
 		)
 		dby = add(dby, dy)
 
-		rnn.Lock()
 		dh := add(
 			dot(rnn.why.T(), dy),
 			dhnext,
 		)
-		rnn.Unlock()
 
 		for i := range hs[t] {
 			dhraw[i] = (1 - hs[t][i]*hs[t][i]) * dh[i]
@@ -215,9 +209,7 @@ func (rnn *RNN) backPropagation(xs, ps, hs, ts [][]float64) (dwxh, dwhh, dwhy *m
 		} else {
 			dwhh.Add(dwhh, dotVec(dhraw, hs[t-1]))
 		}
-		rnn.Lock()
 		dhnext = dot(rnn.whh.T(), dhraw)
-		rnn.Unlock()
 	}
 
 	return
@@ -258,15 +250,11 @@ func (rnn *RNN) Train() (chan<- TrainingSet, <-chan float64) {
 			xs := tset.Inputs
 			ts := tset.Targets
 			hp := make([]float64, len(rnn.hprev))
-			rnn.Lock()
 			copy(hp, rnn.hprev)
-			rnn.Unlock()
 			ys, hs := rnn.forwardPass(xs, hp)
 			// Save the last state for future training
-			rnn.Lock()
 			copy(rnn.hprev, hs[len(hs)-1])
 			//rnn.hprev = hs[len(hs)-1]
-			rnn.Unlock()
 			ps := normalizeByRow(ys)
 			// Loss evaluation
 			loss := float64(0)
@@ -305,9 +293,7 @@ func (rnn *RNN) Train() (chan<- TrainingSet, <-chan float64) {
 				}(param)
 			}
 			// Adaptation
-			rnn.Lock()
 			adagrad.apply(rnn, dwxh, dwhh, dwhy, dbh, dby)
-			rnn.Unlock()
 		}
 	}(feed, info)
 	return feed, info

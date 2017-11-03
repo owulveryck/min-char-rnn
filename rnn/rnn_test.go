@@ -3,7 +3,7 @@ package rnn
 import (
 	"testing"
 
-	"gonum.org/v1/gonum/mat"
+	"github.com/gonum/matrix/mat64"
 )
 
 func TestGob(t *testing.T) {
@@ -30,13 +30,13 @@ func TestGob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !mat.Equal(rnn.whh, rnnBkp.whh) {
+	if !mat64.Equal(rnn.whh, rnnBkp.whh) {
 		t.Fatal("whh differs")
 	}
-	if !mat.Equal(rnn.wxh, rnnBkp.wxh) {
+	if !mat64.Equal(rnn.wxh, rnnBkp.wxh) {
 		t.Fatal("wxh differs")
 	}
-	if !mat.Equal(rnn.why, rnnBkp.why) {
+	if !mat64.Equal(rnn.why, rnnBkp.why) {
 		t.Fatal("why differs")
 	}
 	if !testEq(rnn.bh, rnnBkp.bh) {
