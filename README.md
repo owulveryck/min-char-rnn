@@ -41,3 +41,32 @@ CHAR_CODEC_INPUT_FILE
 CHAR_CODEC_BATCHSIZE  default 25
 ```
 
+# Usage
+
+Example:
+
+This will train the RNN with Shakespeare inputs and save every now and then the model to `shakespeare.bin`
+
+```shell
+export CHAR_CODEC_INPUT_FILE=data/shakespeare/input.txt
+export CHAR_CODEC_VOCAB_FILE=data/shakespeare/vocab.txt
+export RNN_ADAGRADEPSILON=1e-8
+export RNN_RANDOMFACTOR=0.1
+export RNN_LEARNINGRATE=1e-1
+export MIN_CHAR_CHOICE=hard
+export RNN_HIDDENNEURONS=66
+export MIN_CHAR_BATCHSIZE=25
+export MIN_CHAR_SAMPLEFREQUENCY=1000
+export MIN_CHAR_EPOCHS=100
+export MIN_CHAR_SAMPLESIZE=500
+export MIN_CHAR_BACKUPPREFIX=shakespeare
+export MIN_CHAR_BACKUPFREQUENCY=1000
+export CHAR_CODEC_CHOICE=soft
+echo "starting sequence for the sampling" | ./min-char-rnn -train
+```
+
+To use the pre-train model:
+
+```
+echo "Initial sample" | ./min-char-rnn -restore shakespeare.bin
+```
