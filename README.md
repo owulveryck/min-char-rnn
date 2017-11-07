@@ -6,6 +6,8 @@ The code is basically a transcript from his [gist](https://gist.github.com/karpa
 
 I also got some help from Daniel Whitenack's [Building a Neural Net from Scratch in Go](http://www.datadan.io/building-a-neural-net-from-scratch-in-go/)
 
+For more information, please refer to this [blog post](https://blog.owulveryck.info/2017/10/29/about-recurrent-neural-network-shakespeare-and-go.html)
+
 
 # Configuration
 
